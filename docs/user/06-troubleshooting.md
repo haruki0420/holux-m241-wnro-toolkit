@@ -1,19 +1,19 @@
 # Troubleshooting
 
 `m241 doctor` is the first thing to run. It checks the Python environment, the
-`pyserial` version, the serial port list, the vendor drop (if you point at it),
-the device handshake, and the firmware profile of a dump — and prints the exact
-next command to try.
+`pyserial` version, the serial port list, the vendor drop (only with
+`--from-drop`) and the shipped firmware profiles. It only opens the device when
+you pass `--port`, and prints the exact next command to try.
 
 ```bash
 m241 doctor
 m241 doctor --json
 m241 doctor --simulate        # no hardware: proves the install is healthy
-m241 doctor --from-drop ../holux --extract-to vendor/
+m241 doctor --from-drop <folder> --extract-to vendor/
 ```
 
 Exit codes: `0` ok, `1` runtime error, `2` usage, `3` hardware not found,
-`4` verification failed, `5` safety refusal.
+`4` verification failed, `5` safety refusal, `6` flash write failed.
 
 ---
 
@@ -25,31 +25,21 @@ Exit codes: `0` ok, `1` runtime error, `2` usage, `3` hardware not found,
 
 ```bash
 python -m pip install pyserial
-# or, inside the venv:
-pip install -e ".[dev]"
+# or reinstall the toolkit (it pulls pyserial in):
+python -m pip install "git+https://github.com/haruki0420/holux-m241-wnro-toolkit.git"
 m241 doctor
 ```
 
 Note the package name is `pyserial`, but the import name is `serial`.
 
-### `m241: command not found` after `pip install -e .`
+### `m241: command not found` after installing
 
-The venv's `Scripts/` (Windows) or `bin/` (POSIX) is not on `PATH`. Either
-activate the venv or run:
+The Python `Scripts/` (Windows) or `bin/` (POSIX) directory is not on `PATH`.
+Either add it, or run the module directly:
 
 ```bash
 python -m m241 --help
 ```
-
-### `m241` works but `import m241` fails in my IDE
-
-The project uses a `src/` layout. Point your IDE at `src/` as a source root, or
-`pip install -e .` in the same interpreter the IDE uses.
-
-### `ruff` or `pytest` complains about Python 3.9
-
-The project requires **3.10+** (`X | Y` type syntax at runtime). Upgrade, or use
-a newer venv.
 
 ---
 
@@ -103,9 +93,11 @@ On Linux also check group membership: `groups | grep dialout`.
 
 ## BootROM sync failures
 
-### `timeout @ BOOT_ROM_START_CMD1 (no 0x5f)`
+### `BootROM sync failed: no 0x5F reply within ...`
 
-The chip never answered `0xA0`. In order of likelihood:
+The chip never answered the `0xA0` sync probe (the message ends with
+`check the port, the cable and that the logger is in BootROM mode`). In order of
+likelihood:
 
 1. **The device is not in a state where the BootROM listens.** Power-cycle it
    (pull the battery for 2 s), turn it on, retry.
@@ -123,11 +115,14 @@ The chip never answered `0xA0`. In order of likelihood:
    ```
 6. **Marginal USB hub.** Plug directly into the machine.
 
-### `unexpected response @ BOOT_ROM_START_CMD2/CMD3/CMD4`
+### `BootROM sync failed: expected 0x.., got 0x..`
 
-The `0xA0` sync worked but a later handshake byte came back wrong. Usually the
-device reset itself mid-sequence (brown-out, bad cable) or the port is being
-probed by the OS (ModemManager on Linux, a vendor app on Windows).
+The `0xA0` sync worked but a later handshake byte came back wrong (the message
+names the expected and the received byte). Usually the device reset itself
+mid-sequence (brown-out, bad cable) or the port is being probed by the OS
+(ModemManager on Linux, a vendor app on Windows). `BootROM echo mismatch in ...`
+is the same class of problem: the chip echoed something other than what was
+sent.
 
 ### Already in BootROM and don't want to reset
 
@@ -142,27 +137,37 @@ previous run died mid-way and left the chip listening.
 
 ## Dump problems
 
-### `firmware size from header is invalid (0x0)`
+### `implausible firmware size at header offset 0xF4: ...`
 
-The read at `base+0xF4` returned zero — the chip answered but the flash was not
-mapped where we looked. Almost always a **wrong `--base-addr`**:
+The read at `base+0xF4` did not decode to a plausible size — the chip answered
+but the flash was not mapped where we looked. Almost always a **wrong
+`--base-addr`**. The correct default is `0x00200000`:
 
 ```bash
-m241 dump auto --base-addr 0x0 -o backup/stock.bin          # linear flash view
-m241 dump auto --base-addr 0x20000000 -o backup/stock.bin   # default
+m241 dump auto -o backup/stock.bin                        # default: 0x00200000
+m241 dump auto --base-addr 0x0 -o backup/stock.bin        # linear flash view
 ```
+
+`0x20000000` is **not** the firmware on this part: it reads back as an unmapped
+bus (`42 20 02 02`). Do not use it. The message also prints the raw bytes and
+both endian interpretations; pass `--length` only if you know the size.
 
 or you were not really in BootROM (see above).
 
-### `read32 checksum mismatch`
+### `short read at 0x...: got N of M bytes` / `timeout after ... waiting for data`
 
-Transient — the chip was still busy. `m241 dump` retries automatically; if it
-keeps failing, lower the read size or try `--no-swap` (MT3318 variants differ in
-32-bit byte order):
+A transient read failure — the chip was still busy or the cable glitched.
+There is no automatic retry: re-run the dump. If it keeps failing, try
+`--no-swap` (MT3318 variants differ in 32-bit byte order), a shorter cable, or
+another USB port:
 
 ```bash
 m241 dump auto --no-swap -o backup/stock.bin
 ```
+
+There is no `read32 checksum mismatch` error: reads over the BootROM carry no
+checksum trailer (the separate `0xA4` checksum command is the only one that
+does).
 
 ### Two dumps differ
 
@@ -170,15 +175,15 @@ The tool refuses to proceed, because a flaky read is a flaky write. Causes:
 unstable cable, USB power saving, or a device that reset during the dump.
 Re-run; if it is reproducible, the cable is the prime suspect.
 
-### `FirmwareProfileError: no supported profile matches`
+### `no firmware profile matches this image (...)`
 
-Your dump is not a stock V1.11/V1.12/V1.13 image. Either:
+Your dump is not a stock V1.12/V1.13 image. Either:
 
 - the dump is corrupt (compare the two passes),
 - the image is a variant this project has not catalogued (please open an issue
-  with the header fields — `m241 logs info`-style output for firmware is in
-  `m241 patch --dry-run`),
-- or you already patched it (`m241 doctor` will say "already patched").
+  with the detected image facts — `m241 patch --dry-run` prints the family,
+  device type, version, build number, size and SHA-256),
+- or you already patched it (`m241 patch` will say "already patched").
 
 Never force the patch onto an unknown image. Use `--profile` only if you have
 verified the offsets by hand.
@@ -187,7 +192,7 @@ verified the offsets by hand.
 
 ## Patch problems
 
-### `FirmwareError: already patched`
+### `image is already patched: the effective epoch constant ...`
 
 The epoch constant at `0x402F4` already equals `935280000`. You are patching a
 patched image. Use the original dump.
@@ -200,14 +205,14 @@ it; the two firmware images in the drop are the only verified ones.
 ### Can I patch the `.bin` straight out of the Holux zip?
 
 Yes — those are stock images and match the profiles exactly (hashes are in
-`docs/04-firmware-profiles.md`). The recommended route is still dump → patch, so
+[`docs/reference/03-firmware-offsets.md`](../reference/03-firmware-offsets.md)). The recommended route is still dump → patch, so
 you keep a known-good backup of your *own* unit.
 
 ---
 
 ## Flash problems
 
-### `DA SYNC byte 0xc0 not found`
+### `no 0xC0 sync byte from the download agent ...`
 
 The DA did not boot. Causes:
 
@@ -217,7 +222,7 @@ The DA did not boot. Causes:
   and writing there kills the chip.
 - Wrong DA file (not `DA_v3.8.4.bin`).
 
-### `unsupported DA version: 0x....`
+### `unsupported download agent version 0x....; expected 0x0308`
 
 You are using a global `MTK_AllInOne_DA_*.bin` instead of Holux's DA v3.8. Use
 the file from the official logger utility.
@@ -228,8 +233,7 @@ The write is now incomplete. **The device state is undefined.** Re-flash your
 original dump with the same command:
 
 ```bash
-m241 flash auto --da vendor/DA_v3.8.4.bin \
-    --fw backup/m241_stock.bin --backup backup/m241_stock.bin
+m241 flash auto --da vendor/DA_v3.8.4.bin --fw backup/stock.bin --backup backup/stock.bin
 ```
 
 Do not power-cycle into the half-written firmware expecting it to boot.
@@ -237,14 +241,15 @@ Do not power-cycle into the half-written firmware expecting it to boot.
 ### `--high-baud` makes it worse
 
 Drop it. High baud is an optimisation, not a requirement; marginal cables fail
-at 460800/912600.
+at 460800/921600.
 
 ### The device seems dead after a failed flash
 
 Remove and re-insert the battery, then plug in USB **without turning it on** and
 try the dump/flash again with `--assume-brom`. The MT3318 BootROM lives in mask
 ROM and survives flash corruption; a power-cycle usually brings it back. If the
-port never appears at all, you have a hard brick (see `DISCLAIMER.md`).
+port never appears at all, the unit may need physical service — see
+`DISCLAIMER.md`.
 
 ---
 
@@ -264,12 +269,14 @@ record length always comes from the block header's bitmask.
 ### Fewer points than the manual claims
 
 Expected. See `docs/reference/02-log-format.md`: 130,048 points only happens with 16-byte
-records; a V1.13 unit (20-byte records) holds 104,038 on 2 MiB.
+records; a V1.13 unit configured for 20-byte records holds 104,038 on 2 MiB.
 
-### Dates are all in 2006
+### Dates are 19.6 years in the past
 
-That is the bug this project exists for. Either patch the firmware, or export
-with a correction:
+That is the bug this project exists for. The offset is always **19.6 years**
+(7168 days), so the year you see depends on today's date: an unpatched unit in
+late 2026 shows 2007, while earlier in 2026 it showed 2006. Either patch the
+firmware, or export with a correction:
 
 ```bash
 m241 logs read data.bin --format gpx --utc-offset-days 7168 -o fixed.gpx
@@ -301,24 +308,3 @@ is the desired no-op. Force it with `--offset-days 7168`.
 
 Auto detection refuses to shift fresh data. Use `--offset-days 7168`
 explicitly.
-
----
-
-## Tests / CI
-
-### `pytest` fails only on Windows
-
-Path handling: every path must go through `pathlib.Path`. Report the test name —
-if it is ours, it is a bug.
-
-### `pytest` tries to open a serial port
-
-It should not. The suite uses `m241.protocol.simulator`, a pure-Python fake
-device. If a test hangs on a real port, that is a bug; please report it.
-
-### Running without hardware
-
-```bash
-m241 selftest        # dump -> patch -> flash -> read, entirely in memory
-m241 doctor --simulate
-```

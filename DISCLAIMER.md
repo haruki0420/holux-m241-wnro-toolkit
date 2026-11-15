@@ -21,13 +21,19 @@ hard brick means the device is scrap.
 | Writing to `0x00100000`–`0x001007FF` | The BootROM's own stack; the chip **dies instantly** (this is why the DA load address is `0x00100800`) |
 | Interrupting the DA load | BootROM session dies; power-cycle and retry (usually fine) |
 | Battery dies during a log download | Log data may be lost; device itself is fine |
-| Hard brick | No JTAG → effectively unrecoverable |
+| Hard brick | No JTAG → the unit is permanently unusable |
+
+> The BootROM is in mask ROM and cannot be erased, so a failed write is usually
+> recoverable by power-cycling and re-flashing your own backup. A wrong image, or
+> a power loss at the wrong moment, can still leave the unit permanently
+> unusable.
 
 ## 3. Non-negotiable pre-flight checklist
 
-1. **Dump your own firmware first** (`m241 dump`). Do it **twice** and confirm
-   both SHA256 hashes are identical. Keep that file somewhere safe and
-   read-only. It is your only rollback.
+1. **Dump your own firmware first** (`m241 dump`). It reads the image twice and
+   refuses to save unless both SHA256 hashes are identical, so you do not have
+   to do that by hand. Keep the file somewhere safe and read-only. It is your
+   only rollback.
 2. **Verify the dump matches a known profile** (`m241 patch --dry-run`
    prints the detected profile). If detection fails, stop — do not force it.
 3. Use a **known-good USB cable** and a machine that will not sleep, update,

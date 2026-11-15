@@ -13,6 +13,7 @@ from m241.logfile import (
     capacity,
     capacity_table,
     estimate_points,
+    flash_name_from_code,
     flash_name_from_da,
     record_bytes_for_version,
     resolve_flash,
@@ -197,9 +198,20 @@ def test_estimate_points() -> None:
 # DA flash id
 # ---------------------------------------------------------------------------
 def test_flash_name_from_da() -> None:
-    assert flash_name_from_da(0x22BA) == "2M"
-    assert flash_name_from_da(0x22BA) is not None
+    # flash_device_id is the byte field of the DA info report; the measured
+    # retail unit reports 0x49 with flash_size = 0x80000 (512 KiB).
+    assert flash_name_from_da(0x49) == "512K"
     assert flash_name_from_da(0x1234) is None
+    # 0x22BA is the 16-bit device *code*; it must never be treated as the byte
+    # id, which is the conflation that produced a wrong 2 MiB mapping.
+    assert flash_name_from_da(0x22BA) is None
+
+
+def test_flash_name_from_code() -> None:
+    # flash_device_code is the 16-bit field; the same unit reports 0x22BA for
+    # its MX29LV400CB, which is a 512 KiB part -- not a 2 MiB one.
+    assert flash_name_from_code(0x22BA) == "512K"
+    assert flash_name_from_code(0x1234) is None
 
 
 def test_flash_name_from_da_bad_input() -> None:

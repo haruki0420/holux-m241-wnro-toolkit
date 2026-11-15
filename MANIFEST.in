@@ -1,0 +1,28 @@
+# Files that must be in the sdist in addition to what setuptools infers.
+#
+# The sdist ships the test suite, so it must also ship everything the suite
+# needs to run: conftest.py bootstraps sys.path, and two tests read the
+# documentation directly. (There are no binary fixtures -- the test data is
+# synthesised in code -- so tests/fixtures/ only carries its README.)
+include README.md
+include README.en.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include DISCLAIMER.md
+include SECURITY.md
+include AGENTS.md
+include LICENSE
+
+recursive-include tests *.py
+recursive-include docs *.md
+recursive-include tools *.py
+recursive-include tools *.md
+
+# Never ship caches or local artefacts.
+global-exclude *.py[cod]
+prune .pytest_cache
+prune .ruff_cache
+prune backup
+prune vendor
+prune dist
+prune build

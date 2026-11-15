@@ -12,14 +12,14 @@ the toolkit reads the track log and the photo EXIF itself, and emits an
 
 | Need | Why |
 |---|---|
-| `m241` installed (`pip install .`) | the whole workflow |
-| The logger's firmware patched | otherwise every timestamp is 19.6 years off — see [`00-background.md`](01-symptoms.md) |
+| `m241` installed (`pip install "git+https://github.com/haruki0420/holux-m241-wnro-toolkit.git"`) | the whole workflow |
+| The logger's firmware patched | otherwise every timestamp is 19.6 years off — see [Background: GPS week-number rollover](01-symptoms.md) |
 | [exiftool](https://exiftool.org/) | applies the coordinates to the photos (optional: you can use the CSV/JSON output instead) |
 | Camera clock accurate | a wrong camera clock shifts every photo |
 
 The firmware patch matters more than it looks. Without it the M-241 writes
 `2007-04-01` for a 2026 track, and no photo will ever match. Check with
-`m241 info` plus a live NMEA read: the `$GPRMC` date must be today.
+`m241 nmea proxy auto --stdout`: the `$GPRMC` date must be today.
 
 ## 1. Record a track
 
@@ -31,6 +31,10 @@ Keep the logger powered and outdoors until you have a fix. The OLED shows the
 satellite count.
 
 ## 2. Download the log
+
+The download writes the raw track log to a file. This walkthrough calls it
+`track.bin` — the firmware backup used on the fix page is a different file,
+`backup/stock.bin`.
 
 ```bash
 m241 logs download COM3 -o track.bin
@@ -67,14 +71,19 @@ m241 logs info track.bin
 ```
 
 ```
+file          : track.bin
+size          : 212860 bytes
 blocks        : 4
-  block 0x000000  count=3244  bitmask=0x8000001D  period=5s  used=65012 bytes
+  block 0x000000  count=3244  bitmask=0x8000001D  policy=0x0106  period=5s  distance=0m  speed=0km/h  used=65012 bytes
   ...
 record length : 16 bytes
 records       : 10399
 crc errors    : 0
 first utc     : 2024-08-01T23:20:01Z
-last utc      : 2024-10-23T17:44:55Z
+last utc      : 2007-04-01T09:16:08Z
+capacity      :
+  2M: 16 B -> 130,048 points (210,776 of 2,080,768 used, 10.13%); 20 B -> 104,038 points (210,776 of 2,080,768 used, 10.13%)
+  4M: 16 B -> 260,096 points (210,776 of 4,161,536 used, 5.06%); 20 B -> 208,076 points (210,776 of 4,161,536 used, 5.06%)
 ```
 
 Two things to look at:
@@ -95,10 +104,11 @@ whole file is then consistent and no shifting is needed.
 ## 4. Match the photos
 
 ```bash
-m241 logs geotag track.bin ~/Pictures/holiday \
-    --utc-offset +09:00 \
-    -o geotag.args
+m241 logs geotag track.bin "%USERPROFILE%\Pictures\holiday" --utc-offset +09:00 -o geotag.args
 ```
+
+> In PowerShell write `$env:USERPROFILE\Pictures\holiday` instead: `%USERPROFILE%`
+> is expanded by `cmd.exe`, not by PowerShell. The tool does not expand `~`.
 
 ```
 wrote exiftool to geotag.args
@@ -120,7 +130,7 @@ Photos whose nearest track point is too far away are reported and skipped
 rather than being given a wrong position:
 
 ```
-skipped IMG_4471.jpg: nearest track point is 1840s away (limit 300s)
+m241: warning: skipped IMG_4471.jpg: nearest track point is 1840s away (limit 300s)
 ```
 
 That usually means the camera clock drifted, or the logger was off.
@@ -219,10 +229,9 @@ good cross-check.
 # once, after patching the firmware
 m241 logs download COM3 -o track.bin
 m241 logs info track.bin                 # crc errors must be 0
-m241 logs geotag track.bin ~/Pictures/trip \
-    --utc-offset +09:00 --recursive -o geotag.args
+m241 logs geotag track.bin "%USERPROFILE%\Pictures\trip" --utc-offset +09:00 --recursive -o geotag.args
 exiftool -@ geotag.args
-exiftool -GPSLatitude -GPSLongitude ~/Pictures/trip/IMG_0001.jpg
+exiftool -GPSLatitude -GPSLongitude "%USERPROFILE%\Pictures\trip\IMG_0001.jpg"
 ```
 
 ## Troubleshooting

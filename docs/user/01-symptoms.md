@@ -1,8 +1,9 @@
 # Background: GPS week-number rollover and the M-241
 
-This page explains *why* an M-241 reports 2006 in 2026, what the fix actually
-changes, and which alternatives exist. Read it if you want to understand the
-patch before running it.
+This page explains *why* an M-241 reports a date 19.6 years in the past — 2007 on
+our unit in November 2026, 2006 earlier in 2026 — what the fix actually changes,
+and which alternatives exist. Read it if you want to understand the patch before
+running it.
 
 ## 1. GPS time is a week number plus a time-of-week
 
@@ -28,8 +29,8 @@ breaks on 2019-04-06.
 
 ## 2. What the M-241 does wrong
 
-The M-241's main firmware (`HOLUX_M-241`, `B-core_1.20`, build date
-`Feb 9 2006`) converts GPS time to Unix time using a hard-coded constant:
+The M-241's main firmware (`HOLUX_M-241`, `B-core_1.20`) converts GPS time to
+Unix time using a hard-coded constant:
 
 ```
 unix_seconds = gps_seconds_since_1980 + 315964800
@@ -41,13 +42,17 @@ It derives `gps_seconds_since_1980` from the 10-bit WN assuming at most one
 rollover. After 2019-04-06, every timestamp it computes is exactly
 `1024 * 604800 = 619,315,200 s` (7168 days) in the past.
 
-Observed on a real unit (2026-05-03):
+From the upstream write-up, on the original author's unit (reported 2026-05-03):
 
 ```
 $GPRMC,022127.542,V,8960.0000,N,00000.0000,E,0.00,0.00,170906,,,N*7F
-                                                   ^^^^^^
-                                                   == 2006-09-17
+                                                       ^^^^^^
+                                                       == 2006-09-17
 ```
+
+Our own unit showed the same offset: `$GPRMC` carried `010407` (= 2007-04-01)
+while the wall clock was 2026-11-15. The exact year you see depends on today's
+date, because the offset is 7168 days (19.6 years), not a fixed year.
 
 - The time-of-day is correct.
 - Only the **date** is 7168 days behind.
@@ -75,10 +80,11 @@ tool patches exactly one. `tests/test_firmware_patcher.py` asserts the byte set.
 
 The firmware contains 27 instances of the `movs rN,#1; lsls rN,rN,#10`
 pattern (i.e. `+1024`). Four of them look like they belong to the
-week→seconds path; all four were patched in turn on real hardware and **none of
-them changed the RMC date**. (They are flag handling, range comparisons, and a
-"store week − 1024" repair path.) The epoch constant is the deterministic,
-single-site fix.
+week→seconds path; the upstream write-up reports that all four were patched in
+turn and **none of them changed the RMC date** (⚠️ that experiment is the
+original author's, not repeated here). They are flag handling, range
+comparisons, and a "store week − 1024" repair path. The epoch constant is the
+deterministic, single-site fix.
 
 ## 4. The cosmetic version marker
 
@@ -97,15 +103,17 @@ identically for V1.12 and V1.13.
 |---|---|---|---|
 | Post-process with `+7168 days` (GPSBabel, spreadsheet, `m241 logs read --utc-offset-days 7168`) | ✅ | ❌ | ❌ |
 | `m241 nmea proxy` (rewrite the stream on the host) | ✅ | ✅ | ❌ |
-| This firmware patch | ✅ | ✅ | ✅ |
+| This firmware patch | ✅ | ✅ | ⚠️ unverified (same code path, display never observed) |
 
-The patch is the only option that fixes the device itself — which matters if
-you want to read the date off the screen while walking around.
+The patch is the only option that fixes the device itself, so it is also the only
+one that can fix the OLED clock — though the screen after flashing was never
+observed (⚠️ unverified).
 
 ## 6. Where the numbers in this project come from
 
 Every offset, hash and size used by the tool is measured from the official
 Holux update packages and recorded in
-[`04-firmware-profiles.md`](../reference/03-firmware-offsets.md). The tool never guesses an
+[`03-firmware-offsets.md`](../reference/03-firmware-offsets.md). The tool never guesses an
 offset: if your image does not match a known profile, `m241 patch` refuses to
-run unless you force it.
+run unless you name the profile explicitly with `--profile v1.12` or
+`--profile v1.13`.

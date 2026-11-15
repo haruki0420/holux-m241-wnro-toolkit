@@ -1,9 +1,12 @@
 # Hardware session notes — M-241 V1.13 on Windows 11
 
 Device: `B-core_1.20`, build `0043`, model `01017-00F` (**V1.13**), MT3318.
-Host: Windows 11 Pro, CP210x bridge (VID 10C4 / PID EA60) as `COM3`.
+Host: Windows 11 Pro, CP210x bridge (VID 10C4 / PID EA60) as a COM port.
 
-Everything here was measured on the device itself with read-only commands.
+Sections 1–7 were measured on the device itself. The destructive flash step is
+called out where it appears; everything else used read-only commands. The
+SHA-256 values are this unit's — the dump contains per-unit runtime fields, so
+your hash will be different.
 
 ---
 
@@ -51,7 +54,7 @@ bitwise complement (`0xA0` → `0x5F`, `0x0A` → `0xF5`, `0x50` → `0xAF`,
 |---|---|
 | Firmware base | **`0x00200000`** (not `0x20000000`) |
 | Read opcode | `0xAF` READ32 |
-| Count field | **16-bit words**, not bytes |
+| Count field | **32-bit dwords** for `0xAF` (16-bit words for `0xA2`/`0xA1`/`0xA4`), not bytes |
 | Reply shape | echo(9 bytes) + data — **no checksum trailer** |
 | 32-bit word order | **byte-reversed** within each word (`e5 9f f0 18` = `18 f0 9f e5`) |
 | `0xA4` CHECKSUM | answers with a 2-byte value (the only command with a trailer) |
@@ -117,32 +120,39 @@ Done and verified:
 - [x] profile detected as v1.13
 - [x] patched image built; the three changed bytes verified
 - [x] stock backup kept at `backup/m241_stock.bin`
+- [x] patched image flashed back; the DA accepted every packet and restarted
+- [x] the logger boots after the flash
+- [x] `$GPRMC` reports 2026-11-15 (`151126`) after the flash
 
-Not done:
+Not done / not observed:
 
-- [ ] flash the patched image back
-- [ ] verify the OLED shows V1.14
-- [ ] verify `$GPRMC` reports today's date
+- [ ] the OLED display after flashing (never seen)
+- [ ] a post-flash log download, so the binary log's corrected timestamps are
+      inferred from the shared NMEA code path rather than measured
+- [ ] Linux, macOS, Bluetooth, 4 MiB and V1.11/V1.12 on hardware
 
-The write path is the only destructive step and has not been exercised on
-hardware yet.
+The write path is destructive and was exercised exactly once, end to end, on
+this unit. `m241 flash` does **not** read back and compare; success means the DA
+accepted every packet and was restarted.
 
-## 8. Tooling used
+## 8. Tooling
 
-Read-only helpers that ship with the repo:
+The one-off bring-up scripts used during this session were removed in the
+repository reorganisation; the knowledge they produced lives in this page and in
+`docs/reference/01-protocol.md`. The table below supersedes the earlier lists in
+this page's history, which named one-off scripts that no longer exist
+(probe_device.py, diag_pmtk.py, bootrom_read.py, dump_firmware_hw.py and
+others).
+
+What remains:
 
 | Tool | Purpose |
 |---|---|
-| `tools/probe_device.py` | raw NMEA capture + optional PMTK probe |
-| `tools/diag_pmtk.py` | PMTK framing variants (found the CRLF issue) |
-| `tools/pmtk180_entry.py` | PMTK180 switch + BootROM sync |
-| `tools/bootrom_read.py` | hexdump / scan of the BootROM address space |
-| `tools/find_firmware_base.py` | locate the `18 f0 9f e5` vector table |
-| `tools/dump_firmware_hw.py` | full read-only firmware dump |
-| `tools/compare_dump.py` | explain dump-versus-official deltas |
-| `tools/bootrom_sync_vendor.py` | sync replay with the alternative reply rule |
-
-Earlier entry attempts kept for reference: `tools/read_bootrom.py`,
-`tools/sweep_sync.py`, `tools/hardsync.py`, `tools/recover_bootrom.py`,
-`tools/explore_bootrom.py`, `tools/tune_sync_delays.py`,
-`tools/probe_read32.py`, `tools/dump_via_bootrom.py`.
+| `tools/compare_dump.py` | explain the byte differences between a real dump and the stock image |
+| `tools/analysis/analyze_firmware.py` | offline firmware analysis; produced the offsets in `docs/reference/` |
+| `tools/hardware/recover_bootrom.py` | try to revive a logger that stopped answering |
+| `tools/hardware/test_da_protocol.py` | exercise the flash-write commands without writing flash |
+| `tools/verify_against_drop.py` | hash-check an official Holux package against the shipped manifest |
+| `tools/check_all.py` | run every gate (lint, docs, tests) and print one line each |
+| `tools/check_docs.py` | fail if a relative Markdown link or repository path is broken |
+| `tools/check_wheel.py` | install the built wheel in isolation and smoke-test the CLI |

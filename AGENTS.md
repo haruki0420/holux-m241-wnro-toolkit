@@ -4,7 +4,9 @@ This file is for AI agents and humans who change this repository. It records
 what was expensive to learn so it does not have to be rediscovered. Read it
 before touching `src/m241/protocol/` or `src/m241/logfile/download.py`.
 
-Everything below was measured on real hardware unless it says otherwise.
+Sections 3–6 were measured on real hardware. Sections 0, 1, 2, 7, 8, 9, 10, 11,
+12 and 13 are process, convention, recovery or open-question notes — not
+hardware measurements.
 
 ---
 
@@ -55,9 +57,11 @@ Three things it does:
 
 1. **Repairs the GPS week-number rollover.** The 2006-era firmware hard-codes
    the GPS-epoch Unix offset `315964800` and never accounts for the second
-   rollover (2019-04-06), so every timestamp is 7168 days in the past. One
-   4-byte change at file offset `0x402F4` (`315964800` → `935280000`) fixes the
-   NMEA date, the OLED clock and the binary log at once.
+   rollover (2019-04-06), so every timestamp is 7168 days in the past. The
+   4-byte date constant at file offset `0x402F4` is replaced
+   (`315964800` → `935280000`); **3 bytes actually change**. That fixes the
+   NMEA date, and — through the shared conversion code — the OLED clock and the
+   binary log; only the NMEA date was confirmed on hardware.
 2. **Downloads and converts the track log**, including matching photos to
    track points by capture time.
 3. **Repairs or relays a live NMEA stream** for hosts that cannot be patched.
@@ -97,12 +101,14 @@ Rules:
 * the range must be a hard-coded constant, not a value derived from user input;
 * refuse to run if that constant is anything unexpected;
 * verify a known-intact marker before erasing;
-* require an explicit `--yes`.
+* require an explicit confirmation: type `WRITE` at the prompt, or pass `--yes`.
 
 ### 2.3 Take a dump before writing anything
 
-`m241 flash` refuses images that are not a patched copy of the user's own
-backup. Do not weaken that check. A full-image flash erases the whole chip.
+`m241 flash` accepts an image that matches a known profile, or one whose
+differing bytes all fall inside the allowed patch offsets of your own backup
+(an image identical to the backup is accepted too); anything else is refused.
+Do not weaken that check. A full-image flash erases the whole chip.
 
 ### 2.4 Never commit personal data
 
@@ -124,8 +130,8 @@ See section 9.
 | UI languages | **English / French / German** — no Japanese | release notes list TC/SC/DE/FR/EN; the 41-entry string table is byte-identical between V1.12 and V1.13 |
 
 The DA's `flash_size` describes the chip it can program. A unit was measured
-holding 212,236 bytes of log *alongside* a 406,620-byte firmware image, so the
-log area is not that chip. This is unresolved; see `docs/ROADMAP.md`.
+holding 212,860 bytes of log *alongside* a 406,620-byte firmware image, so the
+log area is not that chip. This is unresolved; see `docs/dev/04-roadmap.md`.
 
 ---
 
@@ -254,7 +260,7 @@ checksum is **one byte with no `'*'` separator**.
 
 ## 7. Testing
 
-* **467 tests**, all hardware-free. `pytest -q` must stay green.
+* **470 tests**, all hardware-free. `pytest -q` must stay green.
 * `m241.protocol.simulator.FakeDevice` models the chip: sync, reads, writes,
   the DA handshake and the flash write path. When you change a protocol
   detail, **change the simulator too** — that is what makes the regression
@@ -280,7 +286,8 @@ python tools/check_docs.py
 
 * Python **3.10+**, `from __future__ import annotations` everywhere.
 * `ruff` with `select = ["E","F","W","I","UP","B","SIM"]`, line length 100.
-  `tools/**` ignores `E402`, `F401`, `SIM113`.
+  `pyproject.toml` also ignores `E501` and `SIM108` globally; `tools/**` ignores
+  `E402`, `F401`, `SIM113`, and `tests/**` ignores `B011`.
 * **No new runtime dependency.** `pyserial` is the only one and it is imported
   lazily, so `m241 patch`, `m241 logs …` and `m241 nmea repair` work on a
   machine without it.
@@ -358,7 +365,8 @@ The BootROM is mask ROM, so a failed flash is a **soft** brick: the chip still
 answers `0xA0` once the bootloader runs.
 
 1. Power-cycle the logger (remove the battery for ~10 s).
-2. `m241 logs info` / `m241 info` to see whether it boots.
+2. `m241 info` to see whether it boots. (`m241 logs info` takes a dumped log
+   *file*, not the device, so it cannot answer this.)
 3. If it is silent, try `m241 dump --assume-brom`; the BootROM may already be
    listening.
 4. To restore firmware:
@@ -374,7 +382,7 @@ there is no software path back from a chip that is not listening.
 ## 13. Known unknowns
 
 Do not fabricate answers for these; they are recorded as open in
-`docs/ROADMAP.md`.
+`docs/dev/04-roadmap.md`.
 
 * Where the log actually lives, given the DA reports a 512 KiB part while a
   unit held 212 KB of log plus a 406 KB image.

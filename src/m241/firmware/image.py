@@ -1,17 +1,19 @@
 """Firmware image handling for the Holux M-241 (MT3318) GPS logger.
 
-The M-241 firmware is a Thumb image loaded at ``0x20000000`` by the MTK
-BootROM.  The first ``0x200`` bytes carry an MTK/holux header block (family
-string, device type, release name, firmware size, ...) that is identical in
-layout across the V1.12 and V1.13 releases, so a single parser covers both.
+The M-241 firmware is a Thumb image loaded at ``0x00200000`` by the MTK
+BootROM (measured on hardware; ``0x20000000`` is the MT333x window and reads
+back as an unmapped bus on this part).  The first ``0x200`` bytes carry an
+MTK/holux header block (family string, device type, release name, firmware
+size, ...) that is identical in layout across the V1.12 and V1.13 releases, so a
+single parser covers both.
 
 No firmware bytes are shipped with this package: every helper here works on a
 user-supplied image (the official package ``*.bin`` or a flash dump) and every
 test builds its own synthetic image.
 
-Verified facts (``docs/04-firmware-profiles.md``): both V1.12 and V1.13 store
-the Unix time of the GPS epoch (``315964800``) as a little-endian ``u32`` at
-``0x402DC`` (unused) and at ``0x402F4`` (the effective conversion constant),
+Verified facts (``docs/reference/03-firmware-offsets.md``): both V1.12 and V1.13
+store the Unix time of the GPS epoch (``315964800``) as a little-endian ``u32``
+at ``0x402DC`` (unused) and at ``0x402F4`` (the effective conversion constant),
 and carry the ASCII app version (``V1.12`` / ``V1.13``) exactly once.  The
 parser therefore derives the version offset from the bytes instead of
 hard-coding it.

@@ -15,11 +15,12 @@ The M-241 divides its log flash into 64 KiB blocks.  Each block reserves a
         20 B/record -> 26,009 points
 
 The 512 KiB row exists because the download agent on a retail unit reports
-``flash_size = 0x80000`` (MX29LV400CB).  That is the chip it can program, which
-is where the firmware image lives; the log area is evidently separate or larger,
-because a unit was measured holding 212,236 bytes of log alongside a
-406,620-byte firmware image.  See ``docs/11-feature-matrix.md``.  Do not treat
-the 512 KiB row as the log capacity of a retail unit without measuring it.
+``flash_size = 0x80000`` (MX29LV400CB, ``flash_device_id = 0x49``).  That is the
+chip it can program, which is where the firmware image lives; the log area is
+evidently separate or larger, because a unit was measured holding 212,860 bytes
+of log alongside a 406,620-byte firmware image.  See
+``docs/reference/05-features.md``.  Do not treat the 512 KiB row as the log
+capacity of a retail unit without measuring it.
 """
 
 from __future__ import annotations
@@ -36,10 +37,16 @@ BLOCK_SIZE = 0x10000
 BLOCK_HEADER = 0x200
 USABLE_PER_BLOCK = BLOCK_SIZE - BLOCK_HEADER  # 65024
 
-#: DA flash device ids (``flash_device_id`` from the DA info report) -> size key.
+#: DA ``flash_device_id`` (a **byte** in the info report) -> size key.
+#: Measured on a retail M-241: ``0x49`` with ``flash_size = 0x80000``.
 KNOWN_FLASH_DEVICE_IDS: dict[int, str] = {
-    0x22BA: "2M",  # MXIC MX29LV320-class, 2 MiB
     0x49: "512K",  # MXIC MX29LV400CB, 512 KiB (measured on a retail M-241)
+}
+
+#: DA ``flash_device_code`` (a **16-bit** field, not the byte id) -> size key.
+#: The same retail unit reports ``0x22BA`` for its MX29LV400CB.
+KNOWN_FLASH_DEVICE_CODES: dict[int, str] = {
+    0x22BA: "512K",  # MXIC MX29LV400CB, 512 KiB (measured on a retail M-241)
 }
 
 #: Documented record sizes of the two firmware families.
@@ -214,7 +221,11 @@ def estimate_points(flash: str | int, fw_version: str) -> int:
 
 
 def flash_name_from_da(flash_device_id: int) -> str | None:
-    """Map a DA ``flash_device_id`` to a flash-size shorthand (``"2M"``).
+    """Map a DA ``flash_device_id`` to a flash-size shorthand (``"512K"``).
+
+    ``flash_device_id`` is the **byte** field of the info report.  The 16-bit
+    ``flash_device_code`` is a different field with its own table; use
+    :func:`flash_name_from_code` for it.
 
     Returns ``None`` for ids that are not in the verified table; callers should
     fall back to the DA ``flash_size`` field instead of guessing.
@@ -222,6 +233,13 @@ def flash_name_from_da(flash_device_id: int) -> str | None:
     if not isinstance(flash_device_id, int) or isinstance(flash_device_id, bool):
         raise M241Error("flash_device_id must be an int")
     return KNOWN_FLASH_DEVICE_IDS.get(flash_device_id)
+
+
+def flash_name_from_code(flash_device_code: int) -> str | None:
+    """Map a DA ``flash_device_code`` (16-bit) to a flash-size shorthand."""
+    if not isinstance(flash_device_code, int) or isinstance(flash_device_code, bool):
+        raise M241Error("flash_device_code must be an int")
+    return KNOWN_FLASH_DEVICE_CODES.get(flash_device_code)
 
 
 def flash_bytes_from_da(flash_device_id: int) -> int | None:
@@ -241,6 +259,7 @@ __all__ = [
     "BLOCK_SIZE",
     "Capacity",
     "FLASH_SIZES",
+    "KNOWN_FLASH_DEVICE_CODES",
     "KNOWN_FLASH_DEVICE_IDS",
     "RECORD_BYTES_V112",
     "RECORD_BYTES_V113",
@@ -249,6 +268,7 @@ __all__ = [
     "capacity_table",
     "estimate_points",
     "flash_bytes_from_da",
+    "flash_name_from_code",
     "flash_name_from_da",
     "flash_name_from_id",
     "record_bytes_for_version",

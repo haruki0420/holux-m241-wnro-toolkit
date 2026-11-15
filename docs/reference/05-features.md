@@ -5,33 +5,36 @@ separates the features the manual advertises from the ones that are still usable
 today, and says which of them this toolkit can drive.
 
 Manual: `M-241_JP_User Manual.pdf` (43 pages, Japanese). Values below quoted from
-it are marked *(manual)*; everything else was measured on a retail unit
-(`B-core_1.20`, build `0043`, model `01017-00F`, MT3318).
+it are marked *(manual)*. **works** means the feature was exercised on a retail
+unit or is implemented and covered by this toolkit's tests; ⚠️ unverified means
+it was not measured on hardware. The hardware session is recorded in
+[the verification page](../dev/02-verification.md).
 
 ## 1. Hardware and positioning
 
 | Feature | Manual | Status | Notes |
 |---|---|---|---|
-| GPS chipset | MTK MT3318, 32 channels *(manual)* | **works** | `$PMTK705` confirms `MT3318` |
-| Sensitivity | -159 dBm *(manual)* | **works** | 9 satellites in a fix during testing |
-| Update rate | 1 Hz *(manual)* | **works** | |
-| WAAS / EGNOS / MSAS | built-in *(manual)* | **works** | no host-side support needed |
-| Cold / warm / hot start | 36 / 33 / 1 s *(manual)* | **works** | cold start is slower without aiding |
-| Undocumented aiding | — | **works** | `$PMTK715/716/717`; `m241 info --aiding` |
-| Position accuracy | 3.0 m CEP *(manual)* | **works** | |
-| Altitude / speed limits | 18,000 m / 515 m/s *(manual)* | **works** | |
+| GPS chipset | MTK MT3318, 32 channels *(manual)* | **works** | `$PMTK705` returns release/build/model/sdk; `m241 info` derives the chip from the model string (falling back to MT3318) |
+| Sensitivity | -159 dBm *(manual)* | ⚠️ unverified | no sensitivity measurement in this repository |
+| Update rate | 1 Hz *(manual)* | **works** | NMEA arrived at 1 Hz |
+| WAAS / EGNOS / MSAS | built-in *(manual)* | ⚠️ unverified | no host-side support needed, but it was never checked |
+| Cold / warm / hot start | 36 / 33 / 1 s *(manual)* | ⚠️ unverified | no start-time measurement |
+| Undocumented aiding | — | ⚠️ unverified | `$PMTK715/716/717` are sent by `m241 info --aiding`; the effect on start time was never measured |
+| Position accuracy | 3.0 m CEP *(manual)* | ⚠️ unverified | no accuracy measurement |
+| Altitude / speed limits | 18,000 m / 515 m/s *(manual)* | ⚠️ unverified | not tested |
 
 ## 2. Logging
 
 | Feature | Manual | Status | Notes |
 |---|---|---|---|
 | Track logging | 130,000 points *(manual)* | **works, capacity differs** | see the note below |
-| Time-based interval | 1/5/10/15/30/60/120 s *(manual)* | **works** | `$PMTK182,2,3` reports the current interval |
-| Distance-based interval | 50/100/150/200/300/500/1000 m *(manual)* | **works** | |
-| Distance by point / route | *(manual)* | **works** | |
-| Full-stop vs overwrite | *(manual)* | **works** | |
-| Log enable / erase | — | **works** | `$PMTK182,4` / `,5` / `,6` |
-| Read log over USB | ezTour *(manual)* | **works** | `m241 logs read` replaces ezTour |
+| Time-based interval | 1/5/10/15/30/60/120 s *(manual)* | **works** | `$PMTK182,2,1` / `,2,2` report the logging state and mode word |
+| Distance-based interval | 50/100/150/200/300/500/1000 m *(manual)* | ⚠️ unverified | never exercised on hardware; the toolkit does not set it |
+| Distance by point / route | *(manual)* | ⚠️ unverified | never exercised on hardware; the toolkit does not set it |
+| Full-stop vs overwrite | *(manual)* | ⚠️ unverified | never exercised on hardware; the toolkit does not set it |
+| Log enable / disable | — | **works** | `$PMTK182,4` / `,5` — both exercised by a hardware log download |
+| Log erase | — | ⚠️ unverified | `$PMTK182,6` is implemented and simulator-tested but **never run on hardware**; see `docs/dev/04-roadmap.md` |
+| Read log over USB | ezTour *(manual)* | **works** | `m241 logs download` reads the device; `m241 logs read` converts the saved file |
 | Export to GPX / CSV / KML / NMEA | ezTour *(manual)* | **works** | `m241 logs read --format …` |
 
 ### Capacity: the manual's 130,000 does not apply to every unit
@@ -39,11 +42,12 @@ it are marked *(manual)*; everything else was measured on a retail unit
 The manual advertises **130,000 points**. That figure is 2 MiB of log area with
 16-byte records. Two things change it:
 
-- **Record size.** V1.12 firmware writes 16-byte records, V1.13 writes 20-byte
-  records (a float speed field was added). A V1.13 unit therefore stores 20 %
-  fewer points in the same space.
+- **Record size.** The record size comes from the block-header bitmask, not the
+  firmware version: a V1.13 unit can write 16-byte records or 20-byte records
+  (the 20-byte default adds a float speed field). A unit configured for 20-byte
+  records stores 20 % fewer points in the same space.
 - **Flash fitted.** The DA on this unit reports `flash_size = 0x80000`
-  (512 KiB, MX29LV400CB), not 2 MiB.
+  (512 KiB, MX29LV400CB, DA id `0x49`), not 2 MiB.
 
 Measured on this unit:
 
@@ -51,12 +55,15 @@ Measured on this unit:
 $PMTK182,2,8  ->  $PMTK182,3,8,00033F0C
 ```
 
-`0x00033F0C` is 212,236 bytes of log already written, which is more than the
-space left if the firmware image (406,620 bytes) shared a 512 KiB chip with it.
-The log area is therefore **not** the firmware chip, or the DA's `flash_size`
-describes only the part it can program. This is unresolved and recorded in
-`docs/ROADMAP.md`; `m241 logs capacity` reports the arithmetic for the sizes
-that are actually known (2 MiB and 4 MiB) rather than guessing.
+`0x00033F0C` is 212,748 bytes of log written at the moment of the query. The
+`m241 logs download` that followed returned 212,860 bytes — 112 more than the
+status reply, from a different command; the two figures were not reconciled.
+Either way that is more than the space left if the firmware image (406,620
+bytes) shared a 512 KiB chip with it. The log area is therefore **not** the
+firmware chip, or the DA's `flash_size` describes only the part it can program.
+This is unresolved and recorded in [the roadmap](../dev/04-roadmap.md);
+`m241 logs capacity` reports the arithmetic for 512 KiB, 2 MiB and 4 MiB rather
+than guessing.
 
 ## 3. Interfaces
 
@@ -65,7 +72,7 @@ that are actually known (2 MiB and 4 MiB) rather than guessing.
 | USB (mini USB, CMOS level) | *(manual)* | **works** | CP210x bridge; `m241 ports` finds it |
 | NMEA 0183 V3.01 output | 38400 8N1 *(manual)* | **works** | `$GPGGA/$GPGSA/$GPGSV/$GPRMC/$GPVTG` at 1 Hz |
 | NMEA proxy / repair | — | **works** | `m241 nmea proxy` rewrites the date on the fly |
-| **Bluetooth SPP** | V1.2, class 2, 10 m *(manual)* | **works, host-dependent** | see below |
+| **Bluetooth SPP** | V1.2, class 2, 10 m *(manual)* | ⚠️ unverified | never exercised; see below |
 | Bluetooth without SPP | "connect to devices without Bluetooth" *(manual)* | **not usable** | needs the Holux cable accessory, discontinued |
 
 ### Bluetooth
@@ -85,8 +92,9 @@ Practical limits in 2026:
 - The device is **class 2, V1.2**, so expect ~10 m and low throughput; NMEA at
   38400 baud fits comfortably.
 
-Bluetooth was not exercised during the hardware session (all work went over
-USB), so it is marked "works, host-dependent" rather than verified.
+Bluetooth SPP was **never exercised** — all hardware work went over USB — so it
+is marked ⚠️ unverified. The description above is the manual's, not a
+measurement.
 
 ## 3a. UI language: no Japanese in any image we have
 
@@ -159,9 +167,10 @@ export, NMEA proxy.
 | WNRO patch | `m241 patch` | fixes the 19.6-year date error |
 | Firmware flash | `m241 flash` | applies the patch; also the recovery path |
 | Log export | `m241 logs read` | replaces ezTour |
+| Log download | `m241 logs download` | reads the log off the device over USB |
 | Log capacity | `m241 logs capacity` | honest point counts |
 | NMEA proxy | `m241 nmea proxy` | correct dates for software that cannot be patched |
-| Aiding | `m241 info --aiding` | shorter cold start |
+| Aiding | `m241 info --aiding` | sends the undocumented aiding sentences (effect ⚠️ unverified) |
 | Self test | `m241 selftest` | verifies the install without hardware |
 
 ## 6. Summary
@@ -169,7 +178,7 @@ export, NMEA proxy.
 **Still fully usable:** positioning, track logging, USB serial, NMEA output,
 LCD, log modes, and — with this toolkit — the date itself.
 
-**Usable with host-side effort:** Bluetooth SPP (OS-dependent pairing).
+**⚠️ Unverified:** Bluetooth SPP (never exercised; OS-dependent pairing).
 
 **Gone:** ezTour, Mini GPS Viewer, official firmware updates, warranty.
 

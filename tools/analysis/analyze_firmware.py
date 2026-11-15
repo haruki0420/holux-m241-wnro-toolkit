@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline firmware image analysis — how the numbers in this repo were derived.
 
-This is the script that produced `docs/04-firmware-profiles.md`. It needs no
+This is the script that produced `docs/reference/03-firmware-offsets.md`. It needs no
 hardware, no vendor DLLs and it never writes to a device; it just reads `.bin`
 files you point it at.
 

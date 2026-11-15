@@ -29,14 +29,19 @@ size 14896, SHA256 `190d7064cf2320752d8eb65681142730b21cddc90e0d1491d4e8379c3f2e
 
 Note the two versions differ in **build number and device type string**, which
 is a second, independent way to tell them apart when the hash is unknown (e.g.
-because the image is a locally-built variant). `m241 patch --dry-run` prints
-both so you can confirm what it detected.
+because the image is a locally-built variant). On the success path
+`m241 patch --dry-run` prints the input, the detected profile, the version, the
+patch lines, the changed offsets and the two SHA-256 values; the header fields
+(family, device type, build number) appear only in the error path when no
+profile can be detected.
 
 The first 32 bytes are a vector table (`18 f0 9f e5` repeated = `ldr pc, [pc, #-0x18]`),
-i.e. a thumb image loaded at `0x20000000` by the MTK BootROM, **not** at `0x0`.
-That is why `dump`/`flash` default to `--base-addr 0x20000000`; the original
-blog post used `--start-addr 0x0` with a patched argument and that only works
-because the DA maps the flash linearly. Keep both options, document both.
+i.e. a thumb image loaded at **`0x00200000`** by the MTK BootROM, **not** at
+`0x0`. `0x20000000` is the MT333x-style probe address: on this part it reads
+back `42 20 02 02` (unmapped bus). That is why `m241 dump` defaults to
+`--base-addr 0x00200000`; the original blog post used `--start-addr 0x0` with a
+patched argument and that only works because the DA maps the flash linearly.
+Keep both options, document both.
 
 ## The Unix-epoch constant
 
@@ -45,7 +50,7 @@ It appears **twice**, little-endian, in both firmwares:
 
 | Occurrence | V1.12 | V1.13 | Meaning |
 |---|---|---|---|
-| first  | `0x402DC` | `0x402DC` | unused/alternate copy — patching it too double-shifts the clock (verified on hardware by the original author) |
+| first  | `0x402DC` | `0x402DC` | unused/alternate copy — patching it too double-shifts the clock |
 | **effective** | **`0x402F4`** | **`0x402F4`** | the GPS→Unix conversion actually used by the NMEA/log path |
 
 So the WNRO patch is a single LE32 store:
@@ -89,8 +94,8 @@ Changed byte offsets:
 - V1.12: `0x402F6`, `0x402F7`, `0x59B18`  (the two high bytes of the LE32 and the `2`→`4` of the version)
 - V1.13: `0x402F6`, `0x402F7`, `0x59C2C`  (the two high bytes of the LE32 and the `3`→`4` of the version)
 
-These are asserted by `tests/test_patcher.py` against synthetic images and by
-`tools/verify_against_drop.py` against the real drop when it is present.
+These are asserted by `tests/test_firmware_patcher.py` against synthetic images
+and by `tools/verify_against_drop.py` against the real drop when it is present.
 
 ## Log record size (the "12 vs 13" difference)
 
@@ -99,32 +104,41 @@ The release note shipped with V1.13 says:
 > `HoluxLoggerUtility_20090814_1000_Ver1.1.0.48`
 > 2. log format 16 Byte change to 20 Byte. new Speed format.
 
-So the two firmware families differ in the log record they write:
-
-- **V1.12 and older: 16-byte records** (no float speed, 3-byte height, 1-byte CRC)
-- **V1.13: 20-byte records** (adds a 4-byte float speed field; still 3-byte height, 1-byte CRC)
+That is a change to the default log configuration, not a property of the
+firmware: **the record size is determined by the bitmask in the block header**.
+A V1.13 unit can write 16-byte records (UTC + lat + lon + height) or 20-byte
+records (with the 4-byte float speed field), depending on what the log session
+was configured for; V1.12 writes whatever its bitmask says too. The release
+note tells you which default the utility used, not what any given block holds.
 
 Both families nevertheless advertise *"130,000 points"* in the manual. That
-number is only reachable on the 2 MiB flash with the 16-byte format:
+number is only reachable on a 2 MiB log area with the 16-byte format:
 
 ```
 usable per 64 KiB block = 0x10000 - 0x200 (header) = 65024
-2 MiB  -> 32 blocks -> 2,080,768 usable bytes
+2 MiB   -> 32 blocks -> 2,080,768 usable bytes
    16 B/record -> 130,048 points   <- marketing "130,000"
    20 B/record -> 104,038 points
+512 KiB -> 8 blocks  -> 520,192 usable bytes
+   16 B/record -> 32,512 points
+   20 B/record -> 26,009 points
 ```
 
-So a V1.13 unit physically holds ~104k records even though the manual still
-says 130k. `m241 logs capacity` prints the honest table for 2 MiB and 4 MiB
-flash, both formats, and `m241 logs info` reports the *actual* record length
-found in the dump's bitmask. This is the "firm 12/13 で記録できる数が違う"
-issue: it must be derived from the image, never hard-coded.
+The retail unit this project was verified on reports a **512 KiB** flash, so
+**104,038 applies only to a hypothetical 2 MiB log area**; on the measured
+geometry the figures are 32,512 / 26,009. `m241 logs capacity` prints the honest
+table for 512 KiB, 2 MiB and 4 MiB flash, both formats, and `m241 logs info`
+reports the *actual* record length found in the dump's bitmask. This is the
+"firm 12/13 で記録できる数が違う" issue: it must be derived from the image,
+never hard-coded.
 
 ## Flash geometry observed
 
-- Flash chip reported by the DA on a V1.13 unit: MXIC, device id `0x22BA`
-  (`MX29LV320`-class, 2 MiB).
-- BootROM memory map on this chip: flash visible at `0x20000000`, RAM at
+- Flash chip reported by the DA on a V1.13 retail unit: **512 KiB**, MX29LV400CB,
+  manufacturer `0xC2`, 16-bit device code `0x22BA`, DA `flash_device_id = 0x49`.
+  (`0x22BA` is the device-code field, not the byte-wide id.)
+- BootROM memory map on this chip: firmware visible at **`0x00200000`**;
+  `0x20000000` reads back `42 20 02 02` (unmapped bus). RAM at
   `0x100000`–`0x1FFFFF`, DA must be loaded at **`0x00100800`**
   (`0x100000`–`0x1007FF` is BootROM stack/scratch and is lethal to write).
 - `BOOT_SYNC = a0 0a 50 05` → replies `5F F5 AF FA`.

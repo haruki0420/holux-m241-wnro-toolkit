@@ -41,7 +41,7 @@ device. **Do not** test destructive ideas against hardware that isn't yours.
 ## What is *not* a vulnerability
 
 - The device's own firmware bugs (the WNRO bug this project fixes) — see
-  `docs/00-background.md`.
+  `docs/user/01-symptoms.md`.
 - The absence of authentication on the NMEA proxy when you bind it to a public
   interface yourself. It defaults to loopback; if you change that, you own it.
 - Needing physical USB access. If an attacker has your USB port and your device,

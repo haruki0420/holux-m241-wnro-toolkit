@@ -19,7 +19,7 @@ labels: ["enhancement"]
 
 ## Scope check
 
-This project deliberately avoids (see `docs/ROADMAP.md`):
+This project deliberately avoids (see `docs/dev/04-roadmap.md`):
 
 - a GUI,
 - bundling vendor binaries,

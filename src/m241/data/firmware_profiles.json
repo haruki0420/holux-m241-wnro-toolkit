@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Verified Holux M-241 (MT3318) firmware profiles. Derived from the official Holux update packages; no firmware bytes are stored here, only hashes, sizes and byte offsets. Source of truth: docs/04-firmware-profiles.md.",
+  "description": "Verified Holux M-241 (MT3318) firmware profiles. Derived from the official Holux update packages; no firmware bytes are stored here, only hashes, sizes and byte offsets. Source of truth: docs/reference/03-firmware-offsets.md.",
   "profiles": [
     {
       "name": "v1.12",

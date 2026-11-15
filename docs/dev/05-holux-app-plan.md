@@ -1,5 +1,10 @@
 # Plan: reimplementing the Holux M-241 applications
 
+> **This page is aspirational.** It records a plan and the reasoning behind it,
+> not the shipped behaviour. For what the toolkit actually does, see
+> [`docs/reference/04-cli.md`](../reference/04-cli.md) and
+> [`docs/reference/05-features.md`](../reference/05-features.md).
+
 Holux shipped four programs. All are Windows-only, all are gone. This page
 inventories what each one did, maps it onto what this toolkit already covers,
 and lays out how to close the rest.
@@ -22,13 +27,13 @@ and lays out how to close the rest.
 | Firmware patch | `m241 patch` | done |
 | Device identity | `m241 info` | done |
 | Log download | `m241 logs download` | done, verified |
-| Log erase | `m241 logs erase` | done |
+| Log erase | `m241 logs erase` | done, simulator-tested (not run on hardware) |
 | Log parse / stats | `m241 logs info` | done |
 | Log export (GPX/CSV/KML/NMEA/JSON) | `m241 logs read` | done |
 | Photo geotagging | `m241 logs geotag` | done |
 | Live NMEA relay | `m241 nmea proxy` | done |
 | NMEA date repair | `m241 nmea repair` | done |
-| Undocumented aiding | `m241 info --aiding` | done |
+| Undocumented aiding | `m241 info --aiding` | done (effect ⚠️ unverified) |
 | **Device settings** | — | **missing** |
 | **Log format configuration** | — | **missing** |
 | **GPS start modes** | — | **missing** |
@@ -100,8 +105,11 @@ Rules that keep it maintainable:
 
 * **The CLI is the API.** A GUI must call the same functions the CLI calls, not
   shell out and not duplicate protocol code.
-* **`--json` on every command.** A GUI then has a stable data contract and
-  needs no parsing of human output.
+* **`--json` on the commands a GUI needs.** Most commands have it (`ports`,
+  `doctor`, `info`, `dump`, `patch`, `flash`, `logs info`, `logs download`,
+  `logs erase`, `logs capacity`, `nmea repair --stats`, `selftest`). `logs read`,
+  `logs geotag`, `nmea proxy` and `version` do not, because their stdout *is*
+  the payload; add `--json` where a GUI needs structured data.
 * **No new runtime dependency for the core.** A GUI may add one, but it must be
   an optional extra (`pip install "m241-wnro-toolkit[gui]"`).
 * **Every hardware command stays testable without hardware** via
@@ -165,7 +173,7 @@ a map; a web page can, and the project already ships a TCP NMEA relay.
 |---|---|
 | A settings command turns out to be destructive | probe with queries only; never send an unknown setter |
 | GUI drifts from CLI behaviour | GUI calls the same functions; `--json` is the contract |
-| Bluetooth path untested | mark it experimental until someone verifies it |
+| Bluetooth path untested | mark it ⚠️ unverified until someone verifies it |
 | Log area size still unknown | keep `logs capacity` honest, do not invent numbers |
 
 ## 8. Immediate next step

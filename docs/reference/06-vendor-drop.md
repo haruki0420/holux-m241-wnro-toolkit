@@ -44,8 +44,8 @@ the BootROM's own stack/scratch region and is lethal to write. Loading the DA at
 the wrong address is one of the two classic ways to lose the device (the other
 is sending the payload without the 16-bit pair byte swap).
 
-`m241 doctor --from-drop` extracts it to `vendor/DA_v3.8.4.bin` and verifies
-`190d7064…`.
+`m241 doctor --from-drop <drop> --extract-to vendor/` copies it to
+`vendor/DA_v3.8.4.bin` and verifies `190d7064…`.
 
 ### `brom.ini` — flash chip table (useful for decoding the DA report)
 
@@ -57,10 +57,14 @@ is sending the payload without the 16-bit pair byte swap).
 84 = [MXIC]MX29LV800CB
 ```
 
-The keys are the DA's `flash_device_id`. An M-241 with a 2 MiB MXIC part reports
-`flash_device_id = 0x22BA` in the 20-byte DA info report, which is the
-`MX29LV320` family → 2 MiB. `m241.flash` / `m241 logs capacity` use that to pick
-the right geometry instead of assuming 2 MiB.
+The keys are the DA's byte-wide `flash_device_id`. The 16-bit
+`flash_device_code` is a different field: the measured retail unit reports
+`flash_device_id = 0x49` and `flash_device_code = 0x22BA`, for a **512 KiB**
+MX29LV400CB — not a 2 MiB MX29LV320. The toolkit does not guess from this table:
+`m241 flash` reads `flash_size` from the DA report and refuses an image that does
+not fit, `m241 logs capacity` takes `--flash 512K|2M|4M` explicitly, and
+`m241.logfile.capacity.flash_name_from_da()` exposes the known-id mapping for
+callers that already have a DA report.
 
 ### `brom.dll` — the vendor's BootROM driver (not needed at runtime)
 
@@ -77,8 +81,9 @@ already has.
 | V1.13 | 406,620 | `32fe52690db9947bdbfa58caa6dba450b3f4222b23f2e045f606252649159435` |
 
 These are the official update images. They give us the profile table
-(offsets + hashes) and the expected patched hashes, and they are what
-`m241 doctor` checks your own dump against. **They are not needed to flash a
+(offsets + hashes) and the expected patched hashes; `m241 patch` uses those
+hashes to recognise a stock image, and `m241 doctor --from-drop` hashes the
+copies in your drop against the manifest. **They are not needed to flash a
 device you dumped yourself** — a dump plus the DA is enough — but they are the
 ground truth for "did my patch produce a sane image".
 
@@ -90,11 +95,12 @@ source for the 16→20-byte log record change:
 > `HoluxLoggerUtility_20090814_1000_Ver1.1.0.48`
 > `2. log format 16 Byte change to 20 Byte. new Speed format.`
 
-That is the whole reason a V1.13 unit stores ~104k points where a V1.12 unit
-stores ~130k, even though both manuals say 130,000. See
-[`04-firmware-profiles.md`](03-firmware-offsets.md).
+That is the whole reason a unit using the V1.13 utility default (20-byte
+records) stores ~104k points where a 16-byte-record configuration stores ~130k
+on a 2 MiB log area, even though both manuals say 130,000. See
+[the firmware offsets page](03-firmware-offsets.md).
 
-### `ReleaseNote.txt` (V1.13) — other useful lines
+### The V1.13 release note — other useful lines
 
 ```
 5. Fixed Photo issue.
@@ -102,8 +108,11 @@ stores ~130k, even though both manuals say 130,000. See
 7. Add discriminate 2M form 4M by flash ID
 ```
 
-Line 7 is why the tool asks the DA for `flash_size` and the flash ID rather than
-assuming 2 MiB: Holux itself had to cope with both.
+Line 7 is why the tool does not assume 2 MiB: `m241 flash` reads `flash_size`
+from the DA report and refuses an image that does not fit, and
+`m241 logs capacity` takes the geometry with `--flash` instead of guessing. The
+flash **ID** is reported by `m241 flash` and `m241 doctor --simulate` but is not
+used to pick a geometry automatically.
 
 ## How `m241 doctor --from-drop` uses it
 

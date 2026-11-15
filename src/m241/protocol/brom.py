@@ -634,7 +634,7 @@ def _decode_firmware_size(raw_header: bytes) -> int:
     """Decode the size field at ``base + 0xF4``.
 
     The image stores the value little-endian (see
-    ``docs/04-firmware-profiles.md``).  ``0xAF`` READ32 returns byte-reversed
+    ``docs/reference/03-firmware-offsets.md``).  ``0xAF`` READ32 returns byte-reversed
     32-bit words, so callers pass the already-corrected bytes; this helper just
     accepts either endianness and keeps the plausible value.
     """

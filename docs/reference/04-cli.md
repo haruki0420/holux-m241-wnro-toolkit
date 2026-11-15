@@ -1,8 +1,8 @@
 # CLI specification (`m241`)
 
-This is the authoritative behaviour spec for `src/m241/cli.py`. It extends
-[`ARCHITECTURE.md`](../dev/01-architecture.md) with the details that matter for user-facing
-behaviour. Tests in `tests/test_cli.py` enforce it.
+This is the authoritative behaviour spec for `src/m241/cli.py`. It extends the
+[architecture document](../dev/01-architecture.md) with the details that matter
+for user-facing behaviour. Tests in `tests/test_cli.py` enforce it.
 
 `main(argv: list[str] | None = None) -> int` — argv defaults to `sys.argv[1:]`.
 `-h` / `--help` exits 0. Any unknown subcommand or bad option exits **2** with
@@ -19,19 +19,23 @@ warnings and logs go to **stderr**.
 | 3 | hardware not found (no port, can't open it, no BootROM sync) |
 | 4 | verification failed (hash mismatch, two dumps differ, profile mismatch) |
 | 5 | safety refusal (destructive action without confirmation / missing backup) |
+| 6 | flash write failed (device state undefined — re-flash your backup) |
 
 ## Global behaviour
 
 - No command may import `serial` at module import time.
-- `--json` is available on `ports`, `doctor`, `patch`, `logs info`,
-  `logs capacity`, `nmea repair --stats`, `info`. Output is a single JSON object
-  on stdout, pretty-printed with `indent=2`, ASCII-safe (`ensure_ascii=False` is
-  allowed but keys are ASCII).
+- `--json` is available on `ports`, `doctor`, `info`, `dump`, `patch`, `flash`,
+  `logs info`, `logs download`, `logs erase`, `logs capacity`,
+  `nmea repair --stats` and `selftest`. Output is a single JSON object on
+  stdout, pretty-printed with `indent=2`, `ensure_ascii=False`.
+- `--json` is **not** available on `logs read`, `logs geotag`, `nmea proxy` or
+  `version`; those write their payload (CSV/GPX/…, the exiftool argument file,
+  the live stream) to stdout.
 - Paths are created with `parents=True, exist_ok=True` when writing.
-- Progress reporting is `\r`-based on stderr with a percentage; it must be
-  silent when stderr is not a TTY **and** `--quiet` is set.
+- Progress reporting is `\r`-based on stderr with a percentage; it is silent
+  when stderr is not a TTY or `--quiet` is set.
 - Every command accepts `--quiet` / `-q` (suppress progress) and `--verbose`/`-v`
-  (debug detail on stderr). Unknown combos must not crash.
+  (debug detail on stderr).
 
 ## `m241 ports [-q] [--json]`
 
@@ -44,7 +48,7 @@ Lists serial ports. Table columns: device, description, hwid, candidate marker
 Exit 0 even when empty (an empty list is not an error); `"note"` explains what to
 do next.
 
-## `m241 doctor [--json] [--simulate] [--from-drop PATH] [--extract-to DIR] [--include-firmware]`
+## `m241 doctor [--json] [--simulate] [--from-drop PATH] [--extract-to DIR] [--include-firmware] [--port PORT]`
 
 Diagnostics. Sections:
 
@@ -65,8 +69,9 @@ Diagnostics. Sections:
 5. **firmware profiles** — the shipped profiles with name, version, size,
    record bytes.
 
-Exit 0 if every *required* check passes; 3 if a device was requested and not
-found; 4 if a hash verification failed.
+Exit 0 if every *required* check passes; 1 if a required environment check fails
+(package data, pyserial, profiles); 3 if a device was requested and not found;
+4 if a hash verification failed.
 
 `--json` shape:
 
@@ -92,13 +97,13 @@ reports the ACKs.
 `--json`: `{"port", "release", "build", "model", "sdk", "raw", "chip_guess"}`.
 Exit 3 if the port cannot be opened or no reply arrives.
 
-## `m241 dump [PORT] -o FILE [--base-addr 0x20000000] [--length N] [--baud N] [--nmea-baud N] [--no-swap] [--assume-brom] [--pmtk180] [--verify/--no-verify] [--force] [--json]`
+## `m241 dump [PORT] -o FILE [--base-addr 0x00200000] [--length N] [--baud N] [--nmea-baud N] [--no-swap] [--assume-brom] [--pmtk180] [--verify/--no-verify] [--force] [--json]`
 
 BootROM dump. `PORT` may be `auto`. Default: read the size from the header, dump,
-then **prompt the user to power-cycle** and dump again, comparing SHA256
-(`--no-verify` skips the second pass; `--verify` is the default for interactive
-use and forced when `--yes` is given? No: `--no-verify` honours the flag, and
-`--force` allows overwriting an existing output file).
+then **prompt the user to power-cycle** (interactive runs only) and dump again,
+comparing SHA256. `--verify` is the default; `--no-verify` skips the second pass.
+`--force` allows overwriting an existing output file. `m241 dump` has no `--yes`
+option.
 
 Writes `FILE` with `parents=True`. Prints the header summary and the SHA256.
 Detects the firmware profile and prints it (or a warning that it is unknown).
@@ -109,7 +114,7 @@ overwrite without `--force`.
 `--json`: `{"port", "output", "size", "sha256", "profile", "verified", "header"}`
 (no firmware bytes).
 
-## `m241 patch SRC -o DST [--profile auto|v1.12|v1.13] [--target-version V1.14] [--no-version-marker] [--dry-run] [--json]`
+## `m241 patch SRC -o DST [--in-place] [--profile auto|v1.12|v1.13] [--target-version V1.14] [--no-version-marker] [--dry-run] [--json]`
 
 Applies the patch plan. Prints the detected profile, the plan (offset, old → new,
 description), the changed byte offsets, and before/after SHA256. `--dry-run`
@@ -128,11 +133,14 @@ Destructive. Pre-flight, in order, each with its own refusal message:
 1. `--backup` must exist and be a plausible firmware image; if its size differs
    from `--fw`, warn (allow with `--yes`).
 2. `--fw` must parse as a known profile **or** differ from `--backup` only inside
-   the known patch offsets. Otherwise exit 5 ("refusing to flash an image that is
-   not a patched copy of your backup").
+   the known patch offsets (an image identical to the backup is accepted too).
+   Otherwise exit 5 ("refusing to flash an image that is not a patched copy of
+   your backup").
 3. Interactive confirmation: type `WRITE` (uppercase). `--yes` skips it.
 4. Enter BootROM, report DA version/flash size/flash id, check `len(fw) <=
    flash_size`, optional `--high-baud`, write with a progress bar, `restart()`.
+   There is **no read-back or compare after the write**: success means the DA
+   accepted every packet and was restarted.
 
 Exit: 0 ok; 3 hardware; 4 verification/size failure; 5 safety refusal; 6 write
 failed (device state undefined — print the recovery command).
@@ -157,12 +165,13 @@ Converts a dump. Default `--format csv`, default output stdout. `--utc-offset-da
 auto` applies the WNRO shift only if the newest record looks stale. `--flash`
 only affects the capacity/usage report, never the parse.
 
-## `m241 logs capacity [--flash 2M|4M|all] [--firmware V1.12|V1.13] [--interval SECONDS] [--json]`
+## `m241 logs capacity [--flash 512K|2M|4M|all] [--firmware V1.12|V1.13] [--interval SECONDS] [--json]`
 
-Prints the honest table:
+Prints the honest table for 512 KiB, 2 MiB and 4 MiB flash:
 
 ```
 flash  blocks  usable bytes   16-byte records      20-byte records
+512K   8       520,192        32,512 (9.0 h)       26,009 (7.2 h)
 2M     32      2,080,768      130,048 (36.1 h)     104,038 (28.9 h)
 4M     64      4,161,536      260,096 (72.2 h)     208,076 (57.8 h)
 ```

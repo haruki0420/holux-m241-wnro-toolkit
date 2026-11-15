@@ -20,12 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emit an exiftool argument file (or CSV/JSON). Reads EXIF
   `DateTimeOriginal` directly, falls back to the file mtime, applies a camera
   UTC offset, and skips photos whose nearest track point is too far away.
-- **`docs/12-photo-geotagging.md`** — the end-to-end workflow, including why
+- **`docs/user/05-photos.md`** — the end-to-end workflow, including why
   the firmware patch has to come first and how to handle a log recorded before
   the patch.
 - 19 tests covering the PMTK182 downloader and the geotagger (EXIF parsing,
   matching, gap limits, output formats).
 
+### Changed
+
+- **Repository reorganised around who reads what.** `docs/` is split into
+  `user/`, `reference/` and `dev/`; `tools/` went from 29 scripts to 8 (the
+  one-off bring-up scripts were removed once their knowledge was written into
+  `AGENTS.md` and `docs/reference/01-protocol.md`); `scripts/` was removed
+  because its four shims only forwarded to the CLI; `src/`, `tests/` and
+  `tools/` each gained a README. Moves used `git mv`, so rename history is
+  preserved.
+- **CI cut from twelve matrix jobs to five test jobs.** The test matrix is now
+  Linux 3.10 / 3.11 / 3.13, Windows 3.12 and macOS 3.12; ruff, the docs link
+  check and the CLI smoke test run once in the lint job; the build job needs
+  `lint` and `test`. Measured: 507 s → about 2 minutes.
+- **Release workflow gained a `verify` gate** before `build` and `publish`:
+  ruff, the docs link check, the tests, a tag-is-on-main check, a version check
+  (tag = `pyproject.toml` = `__version__`) and a CHANGELOG check.
+- `tools/re/` renamed to `tools/analysis/`, and the ad-hoc scripts used while
+  bringing the write path up were removed; the proven logic lives in
+  `m241.protocol` and is exercised by the test suite.
 
 ### Fixed
 
@@ -54,21 +73,50 @@ release could dump and patch, but its **write path did not work on hardware**.
   reports a precise error instead of a bare sync timeout, and it refuses to
   pulse the reset lines when it cannot tell whether the firmware is running
   (doing so leaves a running logger silent).
+- **`m241 dump` defaulted to an address that is not the firmware.** The default
+  was the MT333x window `0x20000000`, which reads back `42 20 02 02` (unmapped
+  bus) on this part; the firmware vector table is at `0x00200000`. The default
+  is now the measured constant, with regression tests that assert it.
+- **The NMEA-first safety check now exists.** `MtkBootRom.probe_nmea()` returns
+  a tri-state and `start()` refuses to assert DTR/RTS when the firmware may be
+  streaming — doing so leaves a running logger unresponsive until the battery
+  is removed. The documentation already promised this; the code did not
+  implement it.
+- **The log reader could loop forever on a zero bitmask.** A half-erased info
+  block could leave the running bitmask at zero, so the record size was 0 and
+  the block loop never advanced. A non-positive size now ends the block (and
+  raises in `--strict` mode).
+- **`m241 logs download` could leave the logger not recording.** The
+  "logging disabled" command sat outside the `try` whose `finally` re-enables
+  logging; it is inside now, in both `download()` and `erase_log()`. A short
+  chunk also used to return truncated data as success; the loop now continues
+  from the advanced address and raises if the total falls short.
 
 ### Added
 
 - **Hardware-shaped regression tests**: a full 406,620-byte image write
   (1,588 packets + a 92-byte tail), `0xD3` status-byte consumption, and a
   non-zero status report.
-- `docs/01-protocol.md` rewritten with the measured values, including the
-  one-byte echo lag, the two-byte `0xD3` reply, the real 512 KiB flash size,
+- `docs/reference/01-protocol.md` rewritten with the measured values, including
+  the one-byte echo lag, the two-byte `0xD3` reply, the real 512 KiB flash size,
   and a recovery procedure for an interrupted flash.
 
-### Changed
+### Documentation
 
-- `tools/re/` renamed to `tools/analysis/`.
-- Removed the ad-hoc scripts used while bringing the write path up; the proven
-  logic lives in `m241.protocol` and is exercised by the test suite.
+- **Corrected the documentation against the code.** The firmware base is
+  `0x00200000` everywhere (not `0x20000000`); the retail flash is 512 KiB
+  MX29LV400CB with DA id `0x49` (the 16-bit device code `0x22BA` is a different
+  field); log record size comes from the block-header bitmask, not the firmware
+  version; reads carry no checksum trailer and count fields are in words/dwords;
+  exit code 6 (flash write failed) is documented; `--json` coverage, the
+  `m241 logs capacity` 512K row and the `m241 flash` image-acceptance rule match
+  the code; and the verification page now records that this repository dumped,
+  patched and flashed a retail unit (OLED, Linux, macOS, Bluetooth and 4 MiB
+  remain ⚠️ unverified).
+- Stale paths left over from the reorganisation were updated to the
+  `docs/user/`, `docs/reference/` and `docs/dev/` layout, and `AGENTS.md` now
+  says which of its sections are hardware measurements and which are process
+  notes.
 
 ## [1.0.0] — 2026-11-15
 

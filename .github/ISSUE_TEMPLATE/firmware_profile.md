@@ -14,7 +14,9 @@ No firmware bytes are needed, and none may be committed.
 
 - Version shown on the OLED:
 - Where you got it (official package name / own dump):
-- SHA256 of the image: `m241 patch --dry-run --json` prints `sha256_before`.
+- SHA256 of the image: `python tools/analysis/analyze_firmware.py <your_image.bin>`
+  prints it. (`m241 patch --dry-run` only prints a hash once it recognises the
+  image, which is the case this form exists for.)
 
 ## Analyzer output
 

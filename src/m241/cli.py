@@ -330,7 +330,7 @@ def _nmea_collect(
     Every sentence is terminated with ``\\r\\n``.  This matters: the real M-241
     (and MTK firmware in general) only parses a PMTK command once it sees the
     line terminator, so writing ``$PMTK605*31`` without CRLF is silently
-    ignored.  Verified on hardware -- see ``tools/diag_pmtk.py``.
+    ignored.  Verified on hardware.
     """
     for sentence in sentences:
         payload = sentence if sentence.endswith("\r\n") else sentence + "\r\n"
@@ -2386,8 +2386,7 @@ examples:
   m241 ports
   m241 dump auto -o backup/stock.bin
   m241 patch backup/stock.bin -o backup/v114.bin
-  m241 flash auto --da vendor/DA_v3.8.4.bin --fw backup/v114.bin \\
-      --backup backup/stock.bin
+  m241 flash auto --da vendor/DA_v3.8.4.bin --fw backup/v114.bin --backup backup/stock.bin
   m241 logs capacity
   m241 nmea proxy auto --tcp 127.0.0.1:10110
   m241 selftest
@@ -2698,8 +2697,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = logs_sub.add_parser(
         "capacity",
         parents=[common],
-        help="honest point-count table for 2M/4M x 16B/20B",
-        description="Print the exact point capacity of 2 MiB and 4 MiB flash.",
+        help="honest point-count table for 512K/2M/4M x 16B/20B",
+        description="Print the exact point capacity of 512 KiB, 2 MiB and 4 MiB flash.",
     )
     _add_json_option(p)
     p.add_argument("--flash", default="all", choices=("512K", "2M", "4M", "all"),

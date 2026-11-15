@@ -1,4 +1,4 @@
-# The M-241 binary track log format (and why V1.13 stores fewer points)
+# The M-241 binary track log format (and why the point count varies)
 
 The M-241 does not write NMEA to flash. It writes a compact binary log in the
 MTK "logger" format, which `m241.logfile` parses. This page is the format
@@ -59,7 +59,7 @@ ascending bit order, followed by the checksum.
 | 10 | HDOP | 2 (÷100) |
 | 11 | VDOP | 2 (÷100) |
 | 12 | NSAT | 2 (view, used) |
-| 13 | SID | 2 + 32 × (1 + used × (2×elev + 2×azim + 2×snr)) |
+| 13 | SID | `(4 + 2×elev + 2×azim + 2×snr) × satellites in view` (≤32 slots) |
 | 14 | ELEVATION | inside SID |
 | 15 | AZIMUTH | inside SID |
 | 16 | SNR | inside SID |
@@ -72,9 +72,10 @@ M-241 quirks that cost real debugging time:
 
 1. **Lat/lon are 4-byte floats.** Generic MTK loggers use 8-byte doubles. Getting
    this wrong yields ~0.5 m resolution garbage instead of coordinates.
-2. **Height is 3 bytes**, little-endian `u24`. Reinterpret as a float with a
-   zero high byte: `struct.unpack('<f', b'\x00' + data[3])`. (GPSBabel does
-   exactly this — with the comment "M-241" next to it.)
+2. **Height is 3 bytes**, little-endian `u24`. It is the three most significant
+   bytes of a little-endian float32, so prepend the implicit zero low byte:
+   `struct.unpack('<f', b'\x00' + data[:3])`. (GPSBabel does exactly this — with
+   the comment "M-241" next to it.)
 3. **The checksum is one byte and there is no `'*'`.** Generic MTK writes
    `'*'` + checksum (2 bytes).
 4. **`RCR & 0x0008` (or a `HOLUXGR241WAYPNT` info record) means a waypoint**
@@ -85,21 +86,32 @@ M-241 quirks that cost real debugging time:
    (sometimes followed by 4 spaces). They update the bitmask / period /
    distance / speed mid-stream and must be consumed, not parsed as records.
 
-## 4. The V1.12 → V1.13 record-size change
+## 4. Record size: the bitmask decides, not the firmware version
 
-The official release note is unambiguous:
+The official release note for V1.13 says:
 
 ```
 HoluxLoggerUtility_20090814_1000_Ver1.1.0.48
 2. log format 16 Byte change to 20 Byte. new Speed format.
 ```
 
-`V1.13` adds a 4-byte float speed field, so the *default* M-241 bitmask produces:
+That describes a change to the *default* log configuration shipped with the
+utility: V1.13 adds the 4-byte float speed field to the bitmask it writes by
+default.
 
-| Firmware | Default record | Bytes |
+**The record size is determined by the bitmask in the block header.** A V1.13
+unit can write 16-byte records (UTC + lat + lon + height) or 20-byte records
+(with speed), depending on what the log session was configured for — and a
+V1.12 unit writes whatever its bitmask says, too. The firmware version only
+tells you which default the utility used.
+
+| Default configuration | Record | Bytes |
 |---|---|---|
-| V1.11 / V1.12 | UTC, VALID, LAT, LON, HEIGHT, HDOP, NSAT, RCR, … + CRC | **16** |
-| V1.13 | the same **+ SPEED (float)** | **20** |
+| V1.11 / V1.12 utility | UTC, LAT, LON, HEIGHT + CRC | **16** |
+| V1.13 utility | the same **+ SPEED (float)** | **20** |
+
+(The measured V1.13 log uses bitmask `0x8000001D` = UTC + LAT + LON + HEIGHT +
+one CRC byte = 16 bytes, so a V1.13 unit can produce the 16-byte layout too.)
 
 Do not hard-code either number: `m241 logs info` computes the record length from
 the bitmask in the block header. The 16/20 figures above are what the *shipped*
@@ -107,26 +119,38 @@ bitmask happens to produce; a user who enables more fields gets a longer record.
 
 ## 5. Real capacity
 
+The arithmetic is fixed by the geometry above:
+
 | Flash | Blocks | Usable bytes | 16 B records | 20 B records |
 |---|---|---|---|---|
-| 2 MiB (`MX29LV320`, id `0x22BA`) | 32 | 2,080,768 | **130,048** | **104,038** |
+| 512 KiB | 8 | 520,192 | **32,512** | **26,009** |
+| 2 MiB | 32 | 2,080,768 | **130,048** | **104,038** |
 | 4 MiB | 64 | 4,161,536 | 260,096 | 208,076 |
 
-The manual's "130,000 points" is the 16-byte figure rounded down. A V1.13 unit
-therefore holds **~104k** points — 20 % fewer, despite selling the same number.
+The manual's "130,000 points" is the 16-byte figure on a 2 MiB log area,
+rounded down. The retail unit this project was verified on reports a **512 KiB**
+flash (MX29LV400CB, DA id `0x49`), so on that geometry a 20-byte record gives
+26,009 points and a 16-byte record 32,512. **104,038 applies only to a
+hypothetical 2 MiB log area.** The DA's `flash_size` describes the chip it can
+program, which is where the firmware image lives; a unit was measured holding
+~212 KB of log *alongside* a 406,620-byte firmware image, so the log area is not
+that chip. That is unresolved. `m241 logs capacity` prints all three rows; treat
+the 512 KiB row as geometry, not as a measured log capacity.
+
 This is exactly the "12 と 13 で記録できる数が違う" trap:
 
 - do not assume 130k;
 - do not assume the record is 20 bytes just because the unit says V1.13 (the
   bitmask decides);
-- ask the DA for the flash size / use `--flash 4M` when you know the part.
+- ask the DA for the flash size / use `m241 logs capacity --flash …` when you
+  know the part.
 
 At 1 Hz:
 
-| Record | 2 MiB | 4 MiB |
-|---|---|---|
-| 16 B | 36.1 h | 72.2 h |
-| 20 B | 28.9 h | 57.8 h |
+| Record | 512 KiB | 2 MiB | 4 MiB |
+|---|---|---|---|
+| 16 B | 9.0 h | 36.1 h | 72.2 h |
+| 20 B | 7.2 h | 28.9 h | 57.8 h |
 
 (distance- and speed-triggered logging changes this; `m241 logs capacity
 --interval` recomputes it.)

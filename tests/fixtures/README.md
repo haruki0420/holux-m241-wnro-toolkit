@@ -36,7 +36,7 @@ pytest tests -q
 ```
 
 Without those variables the tests skip, so CI and fresh clones stay clean. With
-them, the exact output hashes in `docs/04-firmware-profiles.md` are verified
+them, the exact output hashes in `docs/reference/03-firmware-offsets.md` are verified
 against the real files.
 
 ## If you want to contribute a real log

@@ -1,7 +1,7 @@
 """Tests for :mod:`m241.firmware.patcher` — the WNRO + version-marker patch.
 
 The patch offsets, the LE32 values and the changed-byte sets are the verified
-facts from ``docs/04-firmware-profiles.md``: the WNRO store touches exactly one
+facts from ``docs/reference/03-firmware-offsets.md``: the WNRO store touches exactly one
 occurrence of the epoch constant (``0x402F4``) and flips the two high bytes at
 ``0x402F6``/``0x402F7``; the version marker rewrites the whole 5-byte ASCII run
 so only the final digit moves (``0x59B18`` for V1.12, ``0x59C2C`` for V1.13).

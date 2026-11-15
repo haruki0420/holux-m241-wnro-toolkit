@@ -4,7 +4,7 @@ Hardware-confirmed result: a dump taken from the device differs from the officia
 V1.13 package in exactly 14 bytes -- the programming magic at 0x5C, a second
 field at 0xF8, and a 4-byte tail at 0x63458. Those are written by the vendor
 flashing tool and stripped from the released `.bin`, which is exactly what
-`docs/04-firmware-profiles.md` predicted.
+`docs/reference/03-firmware-offsets.md` predicted.
 
 This tool prints the deltas and, with --normalize, writes a copy with those
 runtime fields zeroed so it can be compared/patched as a stock image.

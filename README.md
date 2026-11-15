@@ -1,7 +1,8 @@
 # Holux M-241 の日付が 2007 年になる問題を直す
 
 M-241 が記録する日付が **19.6 年ずれている**（2026 年なのに 2007 年になる）なら、
-このツールで直せます。Windows / Mac / Linux のどれでも動きます。
+このツールで直せます。Windows では実機で動作確認済みです。Linux / macOS は
+⚠️ 未検証です（コードは CI で動きますが、実機はつないでいません）。
 
 原因は GPS の週数カウンタが 2019 年 4 月に一周したことです。M-241 のファームは
 2006 年製で、その周回を考慮していません。詳しくは
@@ -14,7 +15,7 @@ M-241 が記録する日付が **19.6 年ずれている**（2026 年なのに 2
 | 直るもの | 状態 |
 |---|---|
 | NMEA の日付（地図アプリ・gpsd が見る値） | ✅ 実機で確認済み |
-| 以後に記録するログの日時 | ✅ NMEA と同じ計算経路 |
+| 以後に記録するログの日時 | ⚠️ 未検証（NMEA と同じ計算経路という推測。書き換え後のログは未取得） |
 | OLED の日付表示 | ⚠️ 同じ経路なので直るはずだが画面は未確認 |
 
 | 直らないもの | 理由 |
@@ -48,17 +49,19 @@ m241 --help
 |---|---|
 | M-241 本体 | 電源が入り、USB で PC につながること |
 | USB ケーブル | 付属のもの |
-| PC | Windows 10/11（実機検証済み）、Linux / macOS（未検証） |
+| PC | Windows 11（実機検証済み）、Windows 10（未検証）、Linux / macOS（未検証） |
 | 純正ツールから取り出すファイル 1 つ | **ファーム書き換え時のみ**。下記参照 |
 
 ### 書き換えにだけ必要なファイル
 
 ファームの書き換えには `DA_v3.8.4.bin` という小さなプログラムが要ります。
 これは純正の `HoluxLoggerUtility` に同梱されていたもので、**このリポジトリには
-含めていません**（権利上、再配布できないため）。
+含めていません**（権利上、再配布できないため）。**このファイルが無いと
+ファームの書き込みはできません。**
 
-Holux は 2019 年に GPS 事業から撤退しており公式配布は終了していますが、
-第三者サイトで入手できます。入手したら、このツールで中身を検証できます。
+Holux は 2019 年に GPS 事業から撤退しているため、古い配布物を自分で入手する
+必要があります（このリポジトリからダウンロード先を示すことはできません）。
+入手したら、このツールで中身を検証できます。
 
 ```bash
 m241 doctor --from-drop <入手したファイルのあるフォルダ> --extract-to vendor/
@@ -78,7 +81,7 @@ m241 doctor --from-drop <入手したファイルのあるフォルダ> --extrac
 ### 1. まず何も壊さずに確認する
 
 ```bash
-m241 doctor          # 環境とデバイスの診断
+m241 doctor          # 環境の診断（デバイスは --port、純正パッケージは --from-drop 指定時のみ）
 m241 info            # つながっている M-241 のファームを表示
 ```
 
@@ -101,44 +104,50 @@ m241 patch backup/stock.bin -o backup/fixed.bin --dry-run   # 何が変わるか
 m241 patch backup/stock.bin -o backup/fixed.bin             # 実行
 ```
 
-変更されるのは **4 バイトだけ**です。
+4 バイトの定数を置き換えます。実際に変わるのは **3 バイト**です
+（実機の V1.13 では `0x402F6`、`0x402F7`、`0x59C2C`）。
 
 ### 4. 書き戻す（ここだけ危険）
 
 ```bash
-m241 flash auto --da vendor/DA_v3.8.4.bin \
-    --fw backup/fixed.bin --backup backup/stock.bin
+m241 flash auto --da vendor/DA_v3.8.4.bin --fw backup/fixed.bin --backup backup/stock.bin
 ```
 
-書き込み後に読み戻してハッシュを照合します。一致しなければ失敗として報告します。
+書き込みが終わると、ツールはダウンロードエージェントを再起動して完了を報告します。
+**読み戻しての照合は行いません。** 成功したかどうかは、電源を入れ直したあとに
+NMEA の日付（`$GPRMC`）が今日になっているかで確認します。
 
 **失敗した場合は [失敗したとき](docs/user/04-recovery.md) を読んでください。**
-BootROM は消せない領域なので、電源を入れ直せば復旧できます。
+BootROM はマスク ROM なので消せません。そのため、書き込みに失敗しても多くの場合は
+電源を入れ直して自分のバックアップを書き戻せば復旧できます。ただし、誤ったイメージを
+書いた場合や、書き込み中に電源が落ちた場合は、本体が恒久的に使えなくなる可能性があります。
 
 ### 5. 確認する
 
 ```bash
-m241 info
+m241 info                                      # 端末が応答するか確認
+m241 nmea proxy auto --offset-days 0 --stdout  # NMEA の日付を確認（Ctrl-C で終了）
 ```
 
-NMEA の日付が今日になっていれば成功です。地図アプリで確認する場合は
-`m241 nmea proxy` を使ってください。
+NMEA の `$GPRMC` の日付が今日になっていれば成功です。`--offset-days 0` は
+補正せずにそのまま表示する指定なので、書き込みが失敗していれば 19.6 年前の
+日付のまま見えます。
 
 ---
 
 ## 失敗したとき
 
-**BootROM はチップ内蔵の消せない領域なので、書き込みに失敗しても本体は壊れません。**
-電源を入れ直せば元の状態で起動します。
+BootROM はマスク ROM なので消せません。そのため、書き込みに失敗しても多くの場合は
+電源を入れ直して自分のバックアップを書き戻せば復旧できます。ただし、誤ったイメージを
+書いた場合や、書き込み中に電源が落ちた場合は、本体が恒久的に使えなくなる可能性があります。
 
 ```bash
 # 1. 電池を抜いて 10 秒待ち、入れ直す
 # 2. もう一度書き込む
-m241 flash auto --da vendor/DA_v3.8.4.bin \
-    --fw backup/stock.bin --backup backup/stock.bin
+m241 flash auto --da vendor/DA_v3.8.4.bin --fw backup/stock.bin --backup backup/stock.bin
 ```
 
-詳しくは [失敗したとき](docs/user/06-troubleshooting.md)。
+詳しくは [失敗したとき](docs/user/04-recovery.md)。
 
 ---
 
@@ -153,8 +162,9 @@ m241 flash auto --da vendor/DA_v3.8.4.bin \
 | ファームを書き換える | ✅ | ✅ | ⚠️ |
 
 ```bash
-# ログを後処理で補正
-m241 logs read backup/track.bin --format gpx -o track.gpx
+# ログを吸い出してから後処理で補正
+m241 logs download auto -o backup/track.bin
+m241 logs read backup/track.bin --format gpx --utc-offset-days 7168 -o track.gpx
 
 # 地図アプリに渡す日付をリアルタイム補正
 m241 nmea proxy auto --tcp 127.0.0.1:10110
@@ -170,7 +180,7 @@ m241 nmea proxy auto --tcp 127.0.0.1:10110
 | 写真に位置情報を付ける | `m241 logs geotag` | [写真](docs/user/05-photos.md) |
 | ログを GPX / KML / CSV に変換 | `m241 logs read` | [ログ](docs/user/05-photos.md) |
 | 端末のログを消す | `m241 logs erase` | [ログ](docs/user/05-photos.md) |
-| 地図アプリ用に日付を補正 | `m241 nmea proxy` | [地図アプリ](docs/user/01-symptoms.md) |
+| 地図アプリ用に日付を補正 | `m241 nmea proxy` | [CLI](docs/reference/04-cli.md) |
 | 記録容量を知る | `m241 logs capacity` | [機能一覧](docs/reference/05-features.md) |
 
 コマンドの全一覧は [`m241 --help`](docs/reference/04-cli.md)。
@@ -181,10 +191,10 @@ m241 nmea proxy auto --tcp 127.0.0.1:10110
 
 | | 状態 |
 |---|---|
-| **Windows 10/11** | ✅ **実機で検証済み**。CP210x ドライバが必要 |
+| **Windows 11** | ✅ **実機で検証済み**。CP210x ドライバが必要。Windows 10 は未検証 |
 | **Linux** | ⚠️ **実機未検証**。`/dev/ttyUSB0`、`dialout` グループに追加 |
 | **macOS** | ⚠️ **実機未検証**。`/dev/tty.usbserial-*` |
-| Python | 3.10 / 3.11 / 3.12 / 3.13（CI で全組み合わせをテスト） |
+| Python | 3.10 / 3.11 / 3.12 / 3.13（CI: Linux 3.10・3.11・3.13 / Windows 3.12 / macOS 3.12） |
 
 Windows 以外はコードが動くことしか確認できていません。実機接続の報告を歓迎します。
 

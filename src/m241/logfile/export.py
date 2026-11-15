@@ -3,7 +3,7 @@
 Supported formats (see :data:`EXPORTERS`):
 
 ``gpx``   GPX 1.1 track (schema-shaped, opens in any mapping application)
-``csv``   the column set documented in ``docs/ARCHITECTURE.md``
+``csv``   the column set documented in ``docs/dev/01-architecture.md``
 ``nmea``  reconstructed ``$GPRMC`` sentences (one per record, with checksums)
 ``kml``   KML 2.2 document with a single LineString placemark
 ``json``  JSON document (serialised by :func:`export`)

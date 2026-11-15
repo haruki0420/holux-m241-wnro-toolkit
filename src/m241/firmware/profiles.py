@@ -6,8 +6,8 @@ It is loaded through :mod:`importlib.resources` so an installed wheel and a
 plain ``src/`` checkout both work.
 
 Nothing in this module invents offsets: every value comes from
-``docs/04-firmware-profiles.md``, which was cross-checked byte for byte against
-the official Holux update packages.
+``docs/reference/03-firmware-offsets.md``, which was cross-checked byte for byte
+against the official Holux update packages.
 """
 
 from __future__ import annotations

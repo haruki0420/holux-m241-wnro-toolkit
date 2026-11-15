@@ -44,7 +44,7 @@ FirmwareProfile(
 plus an entry in `src/m241/data/firmware_profiles.json`. To add one:
 
 ```bash
-# 1. dump TWICE and check both hashes match
+# 1. dump (it reads twice and compares the hashes for you)
 m241 dump auto -o backup/mine.bin
 
 # 2. show what the analyzer sees (no proprietary bytes in the output)
@@ -63,17 +63,19 @@ vendor executable.** `.gitignore` blocks the common ones; do not fight it.
 
 ### 2. Hardware reports
 
-We know the code works against the simulator and against the upstream author's
-verified unit. Confirmations on other combos are gold:
+We know the code works against the simulator and against this project's own
+retail unit (Windows 11, CP210x, V1.13 — dump, patch, flash and the NMEA date
+were all confirmed on 2026-11-15). Confirmations on other combos are gold:
 
 | Report | Status |
 |---|---|
-| Windows 10/11, CP210x, V1.13 | wanted |
+| Windows 11, CP210x, V1.13 | **verified by this project** (Windows 10 untested) |
 | Linux (any distro), V1.13 | wanted |
 | macOS 14/15, Apple Silicon | wanted |
 | 4 MiB unit | wanted |
 | GR-245 variant | wanted |
 | V1.11 or earlier | wanted |
+| Bluetooth SPP | wanted (never exercised) |
 
 Paste `m241 doctor --json`, `m241 ports --json`, and (if you dumped)
 `m241 patch --dry-run --json` output. Those are safe: no binary content.
@@ -86,8 +88,10 @@ contribute a real one, strip the coordinates first — see
 
 ### 4. Documentation
 
-`docs/ja/` is incomplete. Japanese translations of
-`01-protocol.md`, `02-log-format.md`, and `06-troubleshooting.md` would be
+The Japanese pages live in `docs/user/` (see
+[`docs/user/01-symptoms.ja.md`](docs/user/01-symptoms.ja.md)). Japanese
+translations of `docs/reference/01-protocol.md`,
+`docs/reference/02-log-format.md` and `docs/user/06-troubleshooting.md` would be
 genuinely useful.
 
 ## Code style
@@ -99,8 +103,8 @@ genuinely useful.
   never a real device.
 - No top-level `import serial` outside `m241/protocol/`. Everything else must
   work on a machine with no pyserial.
-- Public API changes: update `docs/ARCHITECTURE.md` in the same commit.
-- New CLI behaviour: update `docs/07-cli-spec.md` and `tests/test_cli.py`.
+- Public API changes: update `docs/dev/01-architecture.md` in the same commit.
+- New CLI behaviour: update `docs/reference/04-cli.md` and `tests/test_cli.py`.
 
 ## Commit / PR conventions
 

@@ -14,8 +14,10 @@ Wire conventions mirrored here:
 * write16 data arrives with 16-bit pairs swapped and is stored unswapped.
 * The checksum command returns the XOR of the big-endian 16-bit words.
 
-Flash is visible both through the BootROM window (``0x20000000``) and through
-the DA's linear window (``0x0``); ``0x100000``-``0x1FFFFF`` is RAM.
+Flash is visible through the measured BootROM window (``0x00200000``) and
+through the DA's linear window (``0x0``); ``0x100000``-``0x1FFFFF`` is RAM.
+The MT333x-style ``0x20000000`` window is also mapped, because the real part
+does not map it and some tests exercise that distinction.
 """
 
 from __future__ import annotations
@@ -60,7 +62,12 @@ ADDRESS_SPACE = 0x800000
 #: Fake RAM window the download agent is loaded into.
 RAM_BASE = 0x100000
 RAM_SIZE = 0x100000
-#: DA report values chosen to look like a real MX29LV320-class 2 MiB chip.
+#: DA report values for the simulated unit.  These describe a *hypothetical*
+#: 2 MiB part, not the measured retail unit (which reports a 512 KiB
+#: MX29LV400CB with ``flash_device_id = 0x49``); the simulator is a test double
+#: and keeping a 2 MiB geometry exercises the capacity arithmetic.  ``0xBA`` is
+#: deliberately **not** ``0x22BA``: the id field is one byte and the code field
+#: is 16 bits, and conflating them was a real documentation bug.
 DEFAULT_FLASH_SIZE = 0x200000
 DEFAULT_FLASH_DEVICE_ID = 0xBA
 DEFAULT_FLASH_MANUFACTURER = 0x00C2
@@ -128,7 +135,7 @@ class FakeDevice:
 
     @property
     def memory(self) -> bytearray:
-        """The fake flash address space (offset 0 corresponds to ``0x20000000``)."""
+        """The fake flash address space (offset 0 corresponds to ``0x00200000``)."""
         return self._memory
 
     @property

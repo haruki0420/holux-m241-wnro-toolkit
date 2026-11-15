@@ -1,9 +1,10 @@
 # MTK BootROM / Download Agent protocol reference (as implemented)
 
-This is the protocol our `m241.protocol` package speaks. Every value below was
-checked against a real M-241 (MT3318, `B-core_1.20`, model `01017-00F`) and is
-mirrored by the fake device in `tests/test_protocol_*.py`, so a regression in
-the client fails the test suite.
+This is the protocol our `m241.protocol` package speaks. The framing and the
+measured constants below were checked against a real M-241 (MT3318,
+`B-core_1.20`, model `01017-00F`) and are mirrored by the fake device in
+`tests/test_protocol_*.py`, so a regression in the client fails the test suite.
+Anything that was not exercised on hardware is marked ⚠️ unverified.
 
 All multi-byte values on the wire are **big-endian** unless stated otherwise.
 
@@ -22,23 +23,32 @@ Commands the toolkit uses:
 | `$PMTK000*32` | no-op / liveness | `$PMTK001,0,3*30` |
 | `$PMTK605*31` | release request | `$PMTK705,<release>,<build>,<model>,<sdk>*hh` |
 | `$PMTK180*3B` | enter BootROM | (NMEA stops) |
-| `$PMTK182,2,8*33` | log usage (log must be disabled) | `$PMTK182,3,8,<hex addr>` |
+| `$PMTK182,2,8*33` | log usage | `$PMTK182,3,8,<hex bytes used>` |
+| `$PMTK182,2,1` / `,2,2` | logging enabled / mode word | `$PMTK182,3,1,…` / `$PMTK182,3,2,…` |
 | `$PMTK182,7,<addr>,<len>` | read log bytes | `$PMTK182,8,<addr>,<hex data>` |
 | `$PMTK182,4` / `,5` / `,6` | log enable / disable / erase | `$PMTK001,182,n,3` |
 
-`m241 logs download` uses `,5` and `,4` around the transfer, and
-`m241 logs erase` uses `,6`. All three require logging to be stopped first;
-the toolkit always resumes it in a `finally` block.
-| `$PMTK715`/`716`/`717` | undocumented aiding (time / position / both) | `$PMTK001,nnn,3` |
+`m241 logs download` reads the usage with `,2,8`, then asks `,2,1` and `,2,2`
+for the enable state and mode word, and brackets the transfer with `,5` and
+`,4`. `m241 logs erase` uses `,6`. Logging must be stopped for the transfer and
+for the erase; the toolkit always resumes it in a `finally` block.
 
-The aiding commands are a bonus find from the original analysis;
-`m241 info --aiding` sends them so you can shorten a cold start. They are
-harmless no-ops on firmware that does not implement them.
+The undocumented aiding sentences are a bonus find from the original analysis:
+
+| Command | Meaning | Reply |
+|---|---|---|
+| `$PMTK715,<utc>` | aiding: set UTC time | `$PMTK001,715,3` |
+| `$PMTK716,<lat>,<N/S>,<lon>,<E/W>` | aiding: set position | `$PMTK001,716,3` |
+| `$PMTK717,<…>` | aiding: both | `$PMTK001,717,3` |
+
+`m241 info --aiding` sends the current UTC time and a zero position using all
+three so you can shorten a cold start. They are harmless no-ops on firmware that
+does not implement them; the effect on start time is ⚠️ unverified.
 
 ## 2. BootROM entry
 
 ```
-host: 0xA0 ... 0xA0   (repeat up to 10 s until a reply)
+host: 0xA0 ... 0xA0   (repeat up to 5 s until a reply)
 chip: 0x5F
 host: 0x0A   chip: 0xF5
 host: 0x50   chip: 0xAF
@@ -55,11 +65,11 @@ Two ways to get there:
   listens for `0xA0` at 115200. `MtkBootRom.start(pmtk180=True)` does this.
   If NMEA is not flowing the sentence is ignored, so the client checks for the
   stream first and reports a precise error instead of a bare sync timeout.
-- **AutoBoot (reset lines).** Pulse RTS/DTR to reset the chip and probe `0xA0`.
-  `MtkBootRom.start()` uses this by default. It works when the firmware is not
-  running (for example after an interrupted flash), but **pulsing the reset
-  lines at a logger that is running normally can leave it silent** -- so the
-  client only takes this route when it is certain nothing is streaming.
+- **AutoBoot (reset lines).** Assert (hold) RTS/DTR to reset the chip and probe
+  `0xA0`. `MtkBootRom.start()` uses this by default. It works when the firmware
+  is not running (for example after an interrupted flash), but **asserting the
+  reset lines at a logger that is running normally can leave it silent** -- so
+  the client only takes this route when it is certain nothing is streaming.
 
 If you are already in BootROM (e.g. a previous run died), `--assume-brom` skips
 the reset and only does the 4-byte sync.
@@ -152,6 +162,9 @@ starts on a frame boundary.
 | `0x80000000`+ | registers (touching these from BootROM kills it) |
 | `0xA0000000`+ | MT3318 mask ROM |
 
+The firmware base and the DA load address are hardware-measured; the remaining
+ranges are from MTK documentation and are ⚠️ unverified.
+
 The firmware base is `0x00200000`, measured: reading `0x20000000` returns
 `42 20 02 02` (unmapped bus) while `0x00200000` returns the vector table
 `18 f0 9f e5 …`. `m241 dump` reads from `0x00200000`.
@@ -179,12 +192,14 @@ struct DA_INFO {
 };   // packed, big-endian, ">BHBLHHHHL" = 20 bytes
 ```
 
-A retail M-241 reports `flash_size = 0x80000` (512 KiB, MX29LV400CB,
-manufacturer `0xC2`, device `0x22BA`). Do not assume 2 MiB.
+A retail M-241 reports `flash_size = 0x80000` (512 KiB),
+`flash_device_id = 0x49`, manufacturer `0xC2`, and the 16-bit
+`flash_device_code = 0x22BA` (MX29LV400CB). Do not assume 2 MiB, and do not
+read the 16-bit device code as the byte-wide `flash_device_id`.
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `0xD2` | SET_BAUD | `[0xD2][code][0]`, code 1=912600, 2=460800, 3=230400 |
+| `0xD2` | SET_BAUD | `[0xD2][code][0]`, code 1 = 921600 (912600 is accepted as an alias), 2 = 460800, 3 = 230400 |
 | `0xD3` | MEM_CMD | `[0xD3][01][BE32 start][BE32 end]` → **`0x5A` + status byte** |
 | `0xD5` | WRITE | `[0xD5][BE32 0x100]` → `0x5A 0x5A`, then packets |
 | `0xD9` | RESTART | — (reboots into the firmware) |
@@ -216,21 +231,23 @@ exact shape is written by `m241 flash` and covered by
 `tests/test_protocol_da.py::test_write_firmware_handles_the_real_image_length`.
 
 Erasing is implicit: the DA erases the affected sectors when you set the range.
-On the 512 KiB part a full-image flash takes a few seconds.
+The write is not timed anywhere in this repository; any duration figure is
+⚠️ unverified.
 
 ## 6. Failure modes worth knowing
 
-| Symptom | Cause | Fix |
+| Symptom (the message the code raises) | Cause | Fix |
 |---|---|---|
-| `timeout @ BOOT_ROM_START_CMD1` | chip not in BootROM, or wrong port | power-cycle; check `m241 ports`; try `--nmea-baud 38400` |
-| `unexpected response @ CMD2/3/4` | another program holds the port, or the baud is wrong | close serial monitors; retry |
-| `no NMEA stream before $PMTK180` | the logger is not in normal mode (already in BootROM, off, or silent) | power-cycle the logger |
-| DA info never shows `0xC0` | DA written with the wrong byte order, or the wrong address | `byte_swap=True`, `0x00100800` |
-| `DA SYNC mismatch` / version `!= 0x0308` | not the Holux DA | use `DA_v3.8.4.bin` from the drop |
-| `0xD5` ACK times out right after `0xD3` | the `0xD3` status byte was left unread | read two bytes for `0xD3` |
-| write16 echo mismatch mid-payload | echo compared without allowing the one-byte lag | compare against `sent[:-1]` |
-| Write stalls mid-image | machine slept, cable glitched | re-flash the original dump |
-| Logger silent after a failed run | the chip is waiting in BootROM, or the reset lines were pulsed at a running firmware | power-cycle, then retry |
+| `BootROM sync failed: no 0x5F reply within 5.00s` | chip not in BootROM, or wrong port/baud | power-cycle; check `m241 ports`; try `--nmea-baud 38400` |
+| `BootROM echo mismatch in read header` | another program holds the port, or the baud is wrong | close serial monitors; retry |
+| `no NMEA stream before $PMTK180: the logger is not in normal mode` | already in BootROM, switched off, or silent | power-cycle the logger |
+| `no 0xC0 sync byte from the download agent after N bytes` | DA written with the wrong byte order, or the wrong address | `byte_swap=True`, `0x00100800` |
+| `unsupported download agent version 0x…; expected 0x0308` | not the Holux DA | use `DA_v3.8.4.bin` from the drop |
+| `timeout after 30s waiting for the ACK of the memory-range command (0xD3)` | the DA did not answer the range command | power-cycle; check the DA blob and the load address |
+| `timeout after 1.00s waiting for the write command (0xD5), first acknowledgement: received 0 of 1 bytes` | the `0xD3` status byte was left unread | read two bytes for `0xD3` |
+| `BootROM echo mismatch while writing at 0x…` | echo compared without allowing the one-byte lag | compare against `sent[:-1]` |
+| `download agent rejected the packet at 0x…` | machine slept, cable glitched, or the DA NAKed a packet | re-flash the original dump |
+| Logger silent after a failed run | the chip is waiting in BootROM, or the reset lines were asserted at a running firmware | power-cycle, then retry |
 
 ### Recovering from an interrupted flash
 
@@ -242,5 +259,7 @@ answers `0xA0` once the bootloader runs. To restore:
    (an image identical to the backup is accepted -- zero differing bytes),
 3. power-cycle again.
 
-`m241 flash` refuses images that are not a patched copy of your own backup, so
-recovery always uses your own dump.
+`m241 flash` accepts an image that matches a known firmware profile, or one
+whose differing bytes all fall inside the allowed patch offsets of your own
+backup — an image identical to the backup is accepted too (zero differing
+bytes). It refuses anything else, so recovery always uses your own dump.

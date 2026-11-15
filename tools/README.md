@@ -15,7 +15,7 @@ m241 --help
 | Script | Hardware needed | Purpose |
 |---|---|---|
 | `check_all.py` | no | Run every gate (lint, docs, tests) and print one line each |
-| `check_docs.py` | no | Fail if a relative Markdown link is broken |
+| `check_docs.py` | no | Fail if a Markdown link or a backticked repository path is broken |
 | `check_wheel.py` | no | Install the built wheel in isolation and smoke-test the CLI |
 | `verify_against_drop.py` | no | Hash-check an official Holux package against the shipped manifest |
 | `compare_dump.py` | no | Explain the byte differences between a real dump and the stock image |

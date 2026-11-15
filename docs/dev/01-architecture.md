@@ -1,8 +1,8 @@
 # Architecture & module contract
 
 This document is the **frozen interface contract** between the parallel work
-streams of this project. Every owner builds against these signatures; the
-integrator verifies them with `tests/test_contract.py`.
+streams of this project. Every owner builds against these signatures; the test
+suite (`pytest`) verifies the behaviour.
 
 Package root: `src/m241/`.
 Python: **3.10+**, stdlib only + `pyserial`. No Qt, no compilation, no
@@ -17,8 +17,9 @@ Hard platform rules (all streams):
   the port open). `pyserial` is a hard dependency of `m241.protocol` only.
 - File paths are `pathlib.Path`; every CLI output path is created with
   parents.
-- All user-visible text is English; Japanese lives in `README.md` and
-  `docs/ja/`. Log messages go to `stderr`, machine output to `stdout`.
+- All user-visible text is English; the Japanese README is `README.md` and the
+  English one is `README.en.md`. Log messages go to `stderr`, machine output to
+  `stdout`.
 - No proprietary binary may be committed. Tests must synthesise their own
   fixtures.
 
@@ -76,8 +77,9 @@ def platform_hint() -> str: ...
 ### `brom.py`
 
 ```python
-BASE_ADDR_FIRMWARE = 0x20000000   # MT333x-style view
-BASE_ADDR_FIRMWARE_M3318 = 0x00000000
+BASE_ADDR_FIRMWARE = 0x00200000   # measured: 0x20000000 reads back an unmapped bus
+BASE_ADDR_FIRMWARE_M3318 = 0x00000000   # the DA's linear view of the same flash
+BASE_ADDR_FIRMWARE_MT333X = 0x20000000  # MT333x-style probe address only
 BASE_ADDR_DA = 0x00100800         # from HoluxLoggerUtility.exe (push 0x100800)
 BOOT_SYNC = b"\xa0\x0a\x50\x05"
 BOOT_REPLY = (0x5F, 0xF5, 0xAF, 0xFA)
@@ -106,7 +108,8 @@ class MtkBootRom:
 def dump_firmware(brom: MtkBootRom, *, base_addr: int = BASE_ADDR_FIRMWARE,
                   length: int | None = None, byte_swap: bool = True,
                   progress_cb=None) -> bytes:
-    """length=None -> read size from header at base+0xF4 (big-endian u32).
+    """length=None -> read size from header at base+0xF4 (little-endian u32;
+    both byte orders are decoded and the plausible one is kept).
     Raises FirmwareError when the size is implausible."""
 ```
 
@@ -210,7 +213,7 @@ class FirmwareProfile:
     version_offset: int
     epoch_offset: int            # the *effective* one (second occurrence)
     epoch_constant: int = 315964800
-    log_record_bytes: int = 16   # 16 for <=V1.12, 20 for >=V1.13
+    log_record_bytes: int = 16   # profile default; the block-header bitmask decides
     notes: str = ""
 
 PROFILES: dict[str, FirmwareProfile]        # from data/firmware_profiles.json
@@ -264,8 +267,8 @@ no-op **error** (`FirmwareError`, "already patched").
 
 Shipped data file, consumed by `profiles.py` via `importlib.resources`.
 Must contain at least `v1.12` and `v1.13` with the real offsets and hashes
-from `docs/04-firmware-profiles.md` (integrator supplies them; stream B may
-start from the documented values in that file).
+from `docs/reference/03-firmware-offsets.md` (integrator supplies them; stream B
+may start from the documented values in that file).
 
 ---
 
@@ -334,7 +337,7 @@ and M-241's 3-byte height + 1-byte CRC. No `'*'` separator on M-241.
 ### `capacity.py`
 
 ```python
-FLASH_SIZES = {"2M": 0x200000, "4M": 0x400000}
+FLASH_SIZES = {"512K": 0x80000, "2M": 0x200000, "4M": 0x400000}
 BLOCK_SIZE = 0x10000
 BLOCK_HEADER = 0x200
 @dataclass(frozen=True)
@@ -346,9 +349,9 @@ class Capacity:
     points: int
     seconds_at: Callable[[float], float] | None      # or method duration(interval_s)
 def capacity(flash: str | int, record_bytes: int) -> Capacity: ...
-def capacity_table() -> list[Capacity]:              # 2M/4M x 16B/20B
+def capacity_table() -> list[Capacity]:              # 512K/2M/4M x 16B/20B
 def record_bytes_for_version(version: str) -> int:   # "V1.12" -> 16, "V1.13" -> 20
-def flash_name_from_da(flash_device_id: int) -> str | None   # 0x22ba -> ...
+def flash_name_from_da(flash_device_id: int) -> str | None   # 0x49 -> "512K"
 def estimate_points(flash: str | int, fw_version: str) -> int
 ```
 
@@ -396,9 +399,10 @@ def needs_wnro_fix(date_value: date, *, wall_clock: date | None = None) -> bool:
 def shift_days(date_value: date, days: int = WNRO_DAYS) -> date: ...
 def repair_sentence(line: str, *, offset_days: int = 0, auto: bool = True,
                     wall_clock: date | None = None) -> tuple[str, bool]:
-    """Returns (rewritten_line, changed). Only RMC/GGA/GSA/GSV/VTG/ZDA dates
-    are touched; every other sentence is returned verbatim (including the
-    device's debug lines). Checksums are recomputed when a field changed."""
+    """Returns (rewritten_line, changed). Only RMC (the `ddmmyy` date field)
+    and ZDA (day/month/year) carry dates and are rewritten; every other sentence
+    is returned verbatim (including GGA/GSA/GSV/VTG and the device's debug
+    lines). Checksums are recomputed when a field changed."""
 def repair_stream(lines: Iterable[str], **kw) -> Iterator[str]: ...
 ```
 
@@ -425,41 +429,59 @@ third-party argparse helpers. Subcommands:
 
 ```
 m241 ports                       [--json]
-m241 doctor                      [--json] [--simulate]
-m241 info <port>                 probe PMTK605/705 -> firmware/device id
-m241 dump <port> -o FILE         [--base-addr 0x20000000|0x0] [--length N]
-                                 [--verify/--no-verify] [--force]
-m241 patch SRC -o DST            [--profile auto|v1.12|v1.13]
+m241 doctor                      [--json] [--simulate] [--from-drop PATH]
+                                 [--extract-to DIR] [--include-firmware] [--port PORT]
+m241 info <port>                 probe PMTK605/705 -> firmware/device id [--aiding] [--json]
+m241 dump <port> -o FILE         [--base-addr 0x00200000|0x0] [--length N]
+                                 [--verify/--no-verify] [--force] [--json]
+m241 patch SRC -o DST            [--in-place] [--profile auto|v1.12|v1.13]
                                  [--target-version V1.14] [--no-version-marker]
                                  [--dry-run] [--json]
 m241 flash <port> --da DA --fw IMG --backup BACKUP
-                                 [--start-addr 0x0] [--yes] [--high-baud]
+                                 [--start-addr 0x0] [--yes] [--high-baud] [--json]
 m241 logs info FILE              [--json]      (blocks, records, capacity used)
 m241 logs read FILE              [--format csv|gpx|nmea|kml|json] [-o FILE]
-                                 [--flash 2M|4M]
-m241 logs capacity               [--flash 2M|4M] [--firmware V1.12|V1.13] [--json]
+                                 [--flash 2M|4M] [--firmware V1.12|V1.13] [--strict]
+m241 logs download <port> -o FILE [--chunk BYTES] [--length BYTES] [--json]
+m241 logs erase <port>           [--yes] [--require-backup FILE] [--json]
+m241 logs geotag TRACK PHOTO...  [--format exiftool|csv|json] [-o FILE]
+m241 logs capacity               [--flash 512K|2M|4M|all] [--firmware V1.12|V1.13]
+                                 [--interval SECONDS] [--json]
 m241 nmea repair                 [--in FILE|-] [--out FILE|-] [--offset-days 7168|auto]
 m241 nmea proxy <port>           [--offset-days 7168|auto] [--tcp 127.0.0.1:10110]
-m241 selftest                    end-to-end fake-device run (no hardware)
+m241 selftest                    end-to-end fake-device run (no hardware) [--json]
 ```
 
 Rules: `-h` exits 0; unknown command exits 2 with usage on stderr; hardware
 commands never prompt unless `--yes` is absent **and** the action is
-destructive (`flash`); all commands are importable without opening a port.
+destructive (`flash`, `logs erase`); all commands are importable without opening
+a port.
 
 ### `scripts/` (removed)
 
-Earlier versions shipped four thin shims (`dump_firmware.py`, `patch_firmware.py`,
-`flash_firmware.py`, `m241.py`) so the three-step workflow from the original
-blog post still read naturally. They only forwarded to the CLI, so they were
-removed: `m241 dump`, `m241 patch` and `m241 flash` are the interface.
+Earlier versions shipped four thin shims under `scripts/` (dump, patch, flash
+and a wrapper) so the three-step workflow from the original blog post still read
+naturally. They only forwarded to the CLI, so they were removed: `m241 dump`,
+`m241 patch` and `m241 flash` are the interface.
 
 ---
 
 ## CI (owner: stream D)
 
-`.github/workflows/ci.yml`: matrix `os: [ubuntu-latest, windows-latest,
-macos-latest]` × `python: ["3.10", "3.11", "3.12", "3.13"]`, `pip install -e
-".[dev]"`, `ruff check`, `pytest`, plus a `build` job that runs
-`python -m build` and asserts the wheel contains `m241/data/*.json`.
-Also `.github/workflows/release.yml` on `v*` tags: sdist + wheel artifacts.
+`.github/workflows/ci.yml` runs three jobs:
+
+* `lint` on Linux + Python 3.12 — ruff, the docs link check and a hardware-free
+  CLI smoke test (`m241 --help`, `selftest`, `logs capacity`, `ports --json`,
+  `doctor --simulate --json`).
+* `test` — Linux on Python 3.10 / 3.11 / 3.13, Windows on 3.12 and macOS on
+  3.12. It is **not** every OS × every Python: the package is pure Python, so
+  the extra combinations add minutes without adding coverage.
+* `build` (needs `lint` and `test`) — `python -m build`, assert the wheel and
+  sdist ship `m241/data/*.json`, install the wheel and smoke-test it.
+
+`.github/workflows/release.yml` runs `verify` → `build` → `publish` on `v*`
+tags. `verify` runs ruff, the docs link check, the tests, a tag-is-on-main
+check, a version check (tag = `pyproject.toml` = `__version__`) and a CHANGELOG
+check; `publish` creates the GitHub release.
+
+Branch protection on `main` is not configured in the repository itself.

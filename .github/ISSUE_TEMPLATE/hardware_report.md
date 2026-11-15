@@ -26,9 +26,9 @@ any log output you include.
 
 | | |
 |---|---|
-| Product model (from `m241 patch --dry-run`) | e.g. `01017-00F` |
+| Product model (from `m241 info`) | e.g. `01017-00F` |
 | Firmware version shown on the OLED | e.g. V1.13 |
-| Flash size (if known) | 2 MiB / 4 MiB / unknown |
+| Flash size (if known) | 512 KiB / 2 MiB / 4 MiB / unknown |
 | Symptoms | date 19.6 years behind / other |
 
 ## What you ran
