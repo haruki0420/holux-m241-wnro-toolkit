@@ -460,8 +460,8 @@ operating systems.
 
 ## Credits
 
-- The original reverse engineering, BootROM/DA protocol decode, and the
-  discovery that `DA_SetStartAddr(handle, 0x100800)` is the magic number:
+- The original protocol analysis and the discovery that the DA load address is
+  `0x100800`:
   [猫葉Tech / Catea Tech](https://catea.tech/blog/holux-m241-wnro-fix) and the
   upstream project
   [NekobaTechnology/holux-m241-wnro-fix](https://github.com/NekobaTechnology/holux-m241-wnro-fix) (MIT).

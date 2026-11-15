@@ -471,8 +471,7 @@ CI が 3 OS すべてで両方を回します。
 
 ## クレジット
 
-- 元になった逆解析、BootROM/DA プロトコルの解読、そして
-  `DA_SetStartAddr(handle, 0x100800)` という魔法の数字の発見:
+- 元になったプロトコル解析と `0x100800` という DA ロードアドレスの発見:
   [猫葉Tech / Catea Tech](https://catea.tech/blog/holux-m241-wnro-fix) と
   そのプロジェクト
   [NekobaTechnology/holux-m241-wnro-fix](https://github.com/NekobaTechnology/holux-m241-wnro-fix)（MIT）。

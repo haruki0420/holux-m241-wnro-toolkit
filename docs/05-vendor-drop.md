@@ -37,25 +37,15 @@ driver.
 ### `DA_v3.8.4.bin` — the Download Agent (required for flashing)
 
 14,896-byte MTK Download Agent. It is the only file the flash step truly needs
-from the drop. Two facts pin it down:
+from the drop.
 
-- The M-241 BootROM loads it at **`0x00100800`** (not `0x100000` — that region
-  is the BootROM's own stack).
-- The vendor utility proves this address: `HoluxLoggerUtility.exe` contains the
-  instruction `push 0x100800` (`68 00 08 10 00`) **exactly once**, at file
-  offset `0xB7B0`, immediately before a `call DA_SetStartAddr` via the `brom.dll`
-  ordinal. That single instruction is the whole "how do I boot the DA" answer.
+The M-241's BootROM expects it at **`0x00100800`** — not `0x100000`, which is
+the BootROM's own stack/scratch region and is lethal to write. Loading the DA at
+the wrong address is one of the two classic ways to lose the device (the other
+is sending the payload without the 16-bit pair byte swap).
 
 `m241 doctor --from-drop` extracts it to `vendor/DA_v3.8.4.bin` and verifies
 `190d7064…`.
-
-### `brom.dll` — the vendor's BootROM driver (not needed, but explains a lot)
-
-245,760-byte PE32 DLL. It is the reference implementation of the protocol we
-reimplemented: `BRom_AutoBoot::StartCmd` (the `a0/0a/50/05` sync),
-`DownloadData` (single-shot `0xA1` + whole data stream, *not* per-chunk
-transactions), and `DA_SetStartAddr`. Its vtable layout is what made the
-Read16/Write16/Jump opcodes recoverable. We do not load or ship it.
 
 ### `brom.ini` — flash chip table (useful for decoding the DA report)
 
@@ -71,6 +61,13 @@ The keys are the DA's `flash_device_id`. An M-241 with a 2 MiB MXIC part reports
 `flash_device_id = 0x22BA` in the 20-byte DA info report, which is the
 `MX29LV320` family → 2 MiB. `m241.flash` / `m241 logs capacity` use that to pick
 the right geometry instead of assuming 2 MiB.
+
+### `brom.dll` — the vendor's BootROM driver (not needed at runtime)
+
+245,760-byte PE32 DLL that the vendor GUI links against. We do not load, ship or
+require it: `m241.protocol` speaks the wire protocol directly. It stays in the
+manifest purely so `m241 doctor --from-drop` can identify a drop the user
+already has.
 
 ### The two firmware images — patch targets *and* profile sources
 

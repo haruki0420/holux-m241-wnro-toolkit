@@ -1,4 +1,4 @@
-﻿# Architecture & module contract
+# Architecture & module contract
 
 This document is the **frozen interface contract** between the parallel work
 streams of this project. Every owner builds against these signatures; the

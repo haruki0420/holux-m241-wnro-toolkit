@@ -1,4 +1,4 @@
-﻿"""Definitive MTK BootROM sync: keep streaming 0xA0 *while* generating the reset edge.
+"""Definitive MTK BootROM sync: keep streaming 0xA0 *while* generating the reset edge.
 
 Why this exists
 ---------------

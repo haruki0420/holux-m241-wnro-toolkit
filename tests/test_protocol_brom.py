@@ -33,12 +33,19 @@ def _image(size: int = 0x400) -> bytes:
 
 
 def test_verified_constants() -> None:
-    assert brom.BASE_ADDR_FIRMWARE == 0x20000000
+    # Measured 2026-11-15 on a real V1.13 unit: the firmware vector table
+    # (18 f0 9f e5) reads back from 0x00200000, while 0x20000000 returns
+    # `42 20 02 02` (unmapped bus).
+    assert brom.BASE_ADDR_FIRMWARE == 0x00200000
+    assert brom.BASE_ADDR_FIRMWARE_MT333X == 0x20000000
     assert brom.BASE_ADDR_FIRMWARE_M3318 == 0x00000000
     assert brom.BASE_ADDR_DA == 0x00100800
     assert brom.BOOT_SYNC == b"\xa0\x0a\x50\x05"
     assert brom.BOOT_REPLY == (0x5F, 0xF5, 0xAF, 0xFA)
     assert brom.WRITE_CHUNK == 10
+    # The BootROM switch command: no arguments, CRLF terminated.
+    assert brom.PMTK180_COMMAND == b"$PMTK180*3B\r\n"
+    assert brom.DEFAULT_NMEA_BAUD == 38400
 
 
 # -- checksum / swap helpers ------------------------------------------------

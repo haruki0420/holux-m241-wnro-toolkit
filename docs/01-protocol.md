@@ -1,9 +1,8 @@
 # MTK BootROM / Download Agent protocol reference (as implemented)
 
 This is the protocol our `m241.protocol` package speaks. It was recovered from
-`brom.dll` + `HoluxLoggerUtility.exe` + `PowerFlash.exe` behaviour (see the
-original write-up in `docs/00-background.md`) and re-verified against a fake
-device in `tests/test_protocol_*.py`.
+the original write-up in `docs/00-background.md`, the vendor tool's observable
+behaviour, and re-verified against a fake device in `tests/test_protocol_*.py`.
 
 All multi-byte values on the wire are **big-endian** unless stated otherwise.
 
@@ -45,8 +44,8 @@ Two ways to get there:
 
 - **AutoBoot (preferred, no PMTK180):** pulse RTS+DTR low→high to reset the
   chip; the BootROM listens for `0xA0` on its own. This is what
-  `brom.dll!BRom_AutoBoot::StartCmd` does and what `MtkBootRom.start()` uses by
-  default (`use_rts_dtr=True, pmtk180=False`).
+  the reference tooling does and what `MtkBootRom.start()` uses by default
+  (`use_rts_dtr=True, pmtk180=False`).
 - **Legacy (MT3301 style):** send `$PMTK180*3B\r\n` on the NMEA port at the
   current NMEA baud, then sync. Kept as `start(pmtk180=True)`.
 
@@ -94,8 +93,8 @@ chip never starts it. With `byte_swap=True` the DA boots and reports `0xC0`
 
 ### Write transaction shape
 
-`brom.dll!DownloadData` sends `0xA1 + addr + count` **once**, then streams the
-entire payload, echoing 10-byte chunks as it goes. It does **not** re-issue the
+The write command sends `0xA1 + addr + count` **once**, then streams the entire
+payload, echoing 10-byte chunks as it goes. It does **not** re-issue the
 header per chunk. `MtkBootRom.write16` follows that; the last chunk's echo is
 tolerated as lossy because the chip sometimes drops it.
 

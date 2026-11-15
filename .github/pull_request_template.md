@@ -1,4 +1,4 @@
-﻿# Pull request
+# Pull request
 
 ## What this changes
 

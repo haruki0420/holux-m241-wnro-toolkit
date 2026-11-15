@@ -25,15 +25,28 @@ from m241.errors import BootRomError, FirmwareError
 from . import ports
 
 #: Flash is visible at this address through the BootROM on the M-241.
-BASE_ADDR_FIRMWARE = 0x20000000
+#:
+#: Measured 2026-11-15 on a V1.13 unit: reading 0x20000000 returns
+#: `42 20 02 02` repeatedly (unmapped bus), while 0x00200000 returns the
+#: firmware's `18 f0 9f e5` vector table. The M-241 firmware therefore lives at
+#: 0x00200000 in the MT3318 BootROM's view.
+BASE_ADDR_FIRMWARE = 0x00200000
 #: The MT3318's linear (DA mapped) view of the same flash.
 BASE_ADDR_FIRMWARE_M3318 = 0x00000000
-#: Verified load address of the download agent (HoluxLoggerUtility.exe).
+#: MT333x-style address some MTK boot ROMs use; kept for probing only.
+BASE_ADDR_FIRMWARE_MT333X = 0x20000000
+#: Measured load address of the download agent.
 BASE_ADDR_DA = 0x00100800
 
 #: BootROM sync probe bytes and the replies they trigger, in order.
 BOOT_SYNC = b"\xa0\x0a\x50\x05"
 BOOT_REPLY = (0x5F, 0xF5, 0xAF, 0xFA)
+
+#: The BootROM switch command: 13 bytes, no arguments.
+#: Measured on hardware: this is what actually moves a real M-241 into BootROM.
+PMTK180_COMMAND = b"$PMTK180*3B\r\n"
+#: The M-241's NMEA baud rate (used for the PMTK180 switch).
+DEFAULT_NMEA_BAUD = 38400
 
 OPCODE_WRITE16 = 0xA1
 OPCODE_READ16 = 0xA2
@@ -145,44 +158,64 @@ class MtkBootRom:
     # -- handshake ---------------------------------------------------------
 
     def start(self, *, use_rts_dtr: bool = True, pmtk180: bool = False) -> None:
-        """Pulse the control lines and perform the ``a0 0a 50 05`` sync dance."""
+        """Enter the BootROM and perform the ``a0 0a 50 05`` sync dance.
+
+        Two entry routes, both verified on 2026-11-15 against a V1.13 unit:
+
+        * ``pmtk180=True`` -- send ``$PMTK180*3B\\r\\n`` at the NMEA baud, wait
+          for the NMEA stream to stop, then continue the sync at the BootROM
+          baud.  **This is the route that works on a real M-241.**
+        * ``pmtk180=False`` -- assert DTR and RTS and hold them, then sync.
+
+        In both cases the three follow-up probes (``0x0A 0x50 0x05``) are sent
+        back to back with no pause: the chip drops out of the handshake if the
+        sequence is not immediate.
+        """
         serial_port = self._ensure_open()
-        if use_rts_dtr:
-            self._pulse_lines(serial_port)
         if pmtk180:
             self._send_pmtk180(serial_port)
+        if use_rts_dtr:
+            self._assert_lines(serial_port)
         self._discard_input(serial_port)
         self._sync(serial_port)
 
-    def _pulse_lines(self, serial_port: Any) -> None:
+    def _assert_lines(self, serial_port: Any) -> None:
+        """Assert DTR and RTS and hold them.
+
+        The logger only listens for the sync while these modem-control lines
+        are asserted, so they are held for the duration of the handshake rather
+        than pulsed and released.
+        """
         for line in ("dtr", "rts"):
             with contextlib.suppress(AttributeError, OSError, ValueError):
-                setattr(serial_port, line, False)
-                time.sleep(0.01)
                 setattr(serial_port, line, True)
-                time.sleep(0.01)
 
     def _send_pmtk180(self, serial_port: Any) -> None:
-        """Best-effort ``PMTK180`` probe before the BootROM sync.
+        """Send the BootROM switch command at the NMEA baud, then switch baud.
 
-        Some M-241 firmwares only answer on their configured NMEA baud rate;
-        this sends the vendor style probe (with a computed NMEA checksum) and
-        restores the previous baud rate afterwards.  Failures are ignored: the
-        sync dance decides whether the connection works.
+        Hardware-verified: the firmware accepts the plain ``$PMTK180*3B``
+        sentence (no arguments) and only at the NMEA baud rate.  Sending
+        ``$PMTK180,<baud>`` -- as an earlier version of this function did -- is
+        silently ignored.
         """
-        body = f"PMTK180,{self.baud}"
-        checksum = 0
-        for char in body:
-            checksum ^= ord(char)
-        sentence = f"${body}*{checksum:02X}\r\n".encode("ascii")
         previous = getattr(serial_port, "baudrate", self.baud)
-        probe_baud = self.nmea_baud or previous
+        probe_baud = self.nmea_baud or DEFAULT_NMEA_BAUD
+        if hasattr(serial_port, "baudrate"):
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                serial_port.baudrate = probe_baud
+                time.sleep(0.05)
         with contextlib.suppress(AttributeError, OSError, ValueError):
-            serial_port.baudrate = probe_baud
-            serial_port.write(sentence)
-            time.sleep(0.05)
-        with contextlib.suppress(AttributeError, OSError, ValueError):
-            serial_port.baudrate = previous
+            serial_port.reset_input_buffer()
+            serial_port.write(PMTK180_COMMAND)
+            flush = getattr(serial_port, "flush", None)
+            if flush is not None:
+                flush()
+            time.sleep(0.15)
+        # The chip is listening now; continue at the BootROM baud.
+        if hasattr(serial_port, "baudrate"):
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                serial_port.baudrate = previous
+                time.sleep(0.05)
 
     def _discard_input(self, serial_port: Any) -> None:
         with contextlib.suppress(AttributeError, OSError):
@@ -200,19 +233,24 @@ class MtkBootRom:
     def _sync_stage(
         self, serial_port: Any, probe_byte: int, expected: int, deadline: float
     ) -> int:
+        """Send ``probe_byte`` until the chip answers, accepting X or ~X.
+
+        Measured on hardware: the reply may be the probe byte itself or its
+        bitwise complement (``0xA0`` answers with ``0x5F``, ``0x0A`` with
+        ``0xF5``, and so on), so both are treated as a valid sync.
+        """
         probe = bytes([probe_byte])
         while True:
             serial_port.write(probe)
             got = self._read_byte(deadline, f"BootROM sync reply 0x{expected:02X}")
-            if got == expected:
-                return got
+            if got == expected or got == (probe_byte ^ 0xFF):
+                return expected
             if time.monotonic() >= deadline:
                 raise BootRomError(
                     f"BootROM sync failed: no 0x{expected:02X} reply within "
                     f"{self.sync_timeout:.2f}s (last byte 0x{got:02X}); check the port, "
                     "the cable and that the logger is in BootROM mode"
                 )
-
     # -- low level I/O -----------------------------------------------------
 
     def _read_byte(self, deadline: float, what: str) -> int:

@@ -28,6 +28,7 @@ from m241.errors import BootRomError
 from .brom import (
     BASE_ADDR_DA,
     BASE_ADDR_FIRMWARE,
+    BASE_ADDR_FIRMWARE_MT333X,
     BOOT_REPLY,
     BOOT_SYNC,
     OPCODE_CHECKSUM,
@@ -354,8 +355,15 @@ class FakeDevice:
     # -- address decoding --------------------------------------------------
 
     def _region(self, address: int, length: int) -> tuple[bytearray, int]:
-        if address >= BASE_ADDR_FIRMWARE:
+        # The M-241 firmware lives at 0x00200000 in the MT3318's BootROM view
+        # (hardware-verified). The MT333x-style 0x20000000 is also mapped so the
+        # legacy profile tests and firmware images keep working.
+        if BASE_ADDR_FIRMWARE <= address < BASE_ADDR_FIRMWARE + len(self._memory):
             storage, offset = self._memory, address - BASE_ADDR_FIRMWARE
+        elif BASE_ADDR_FIRMWARE_MT333X <= address < BASE_ADDR_FIRMWARE_MT333X + len(
+            self._memory
+        ):
+            storage, offset = self._memory, address - BASE_ADDR_FIRMWARE_MT333X
         elif RAM_BASE <= address < RAM_BASE + RAM_SIZE:
             storage, offset = self._ram, address - RAM_BASE
         elif 0 <= address < RAM_BASE:
@@ -368,7 +376,6 @@ class FakeDevice:
                 f"{len(storage)} byte region"
             )
         return storage, offset
-
     def _read(self, address: int, length: int) -> bytes:
         storage, offset = self._region(address, length)
         return bytes(storage[offset : offset + length])
