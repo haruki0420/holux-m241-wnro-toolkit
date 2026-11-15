@@ -202,3 +202,53 @@ def test_readme_claims_match_reality() -> None:
     assert capacity("2M", 20).points == 104_038
     for text in ("130,048", "104,038"):
         assert text in readme, f"README does not advertise {text}"
+
+
+def test_gitignore_does_not_hide_the_source_tree() -> None:
+    """`.gitignore` must not swallow tracked source.
+
+    Regression guard: a bare ``firmware/`` pattern (intended for vendor
+    firmware *images*) also matches ``src/m241/firmware/`` and silently drops a
+    whole package from the repository. This is how the bug was found; the test
+    keeps it from coming back.
+    """
+    git_dir = REPO_ROOT / ".git"
+    if not git_dir.exists():
+        pytest.skip("not a git checkout")
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "--cached", "--error-unmatch", "src/m241/firmware/patcher.py"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+    )
+    if tracked.returncode != 0:
+        pytest.skip("source tree is not tracked in this checkout")
+
+    package_files = [path for path in (SRC / "m241").rglob("*.py")]
+    assert package_files, "no package sources found"
+
+    # Ask git itself which sources are ignored. `check-ignore --stdin` needs one
+    # path per line and exits 0 when at least one path is ignored.
+    paths = "\n".join(str(path.relative_to(REPO_ROOT)).replace("\\", "/") for path in package_files)
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        cwd=str(REPO_ROOT),
+        input=paths,
+        capture_output=True,
+        text=True,
+    )
+    ignored = [line for line in result.stdout.splitlines() if line.strip()]
+    assert not ignored, "git ignores source files (fix .gitignore):\n" + "\n".join(ignored)
+
+
+def test_all_package_data_is_shipped() -> None:
+    """Every JSON profile data file exists on disk and parses."""
+    import json
+
+    data_dir = SRC / "m241" / "data"
+    files = sorted(data_dir.glob("*.json"))
+    assert files, "no package data files found"
+    for path in files:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert isinstance(payload, dict), f"{path.name} is not a JSON object"
