@@ -88,6 +88,28 @@ Practical limits in 2026:
 Bluetooth was not exercised during the hardware session (all work went over
 USB), so it is marked "works, host-dependent" rather than verified.
 
+## 3a. UI language: this firmware has no Japanese
+
+The Japanese manual lists Japanese in the language menu, but **the firmware
+images available for this unit do not contain Japanese at all**. Measured on
+all three images (V1.12 `01017-00E`, V1.13 `01017-00F`, and the dump taken from
+the retail unit):
+
+| Check | Result |
+|---|---|
+| Language names in the string table | `English`, `French`, `German` and their translations (`Anglais`, `Français`, `Allemand`, `Englisch`, `Deutsch`) |
+| Shift-JIS strings | **none** — every candidate run is byte-identical between the V1.12 and V1.13 builds, i.e. code, not text |
+| Japanese font bitmap | **none** — no dense glyph region anywhere in the image |
+| Accented characters | Latin-1 only (`ü`, `ö`, `ç`, `é`), e.g. `Zurück`, `Löschen`, `Écraser` |
+
+So the UI offers **English / French / German**, and this is the European
+variant of the firmware. The Japanese manual describes a different regional
+build that is not part of any package we have.
+
+This matters when following the manual: its language menu reads
+"English, 日本語", which does not match what the device shows. Use the table
+above instead.
+
 ## 4. Software that no longer exists
 
 | Item | Manual | Status |
@@ -123,6 +145,9 @@ LCD, log modes, and — with this toolkit — the date itself.
 **Usable with host-side effort:** Bluetooth SPP (OS-dependent pairing).
 
 **Gone:** ezTour, Mini GPS Viewer, official firmware updates, warranty.
+
+**Not present at all:** a Japanese UI. The images we have are the European
+variant (English / French / German) with no Japanese strings or font.
 
 **Fixed by this project:** the GPS week-number rollover, which otherwise makes
 every 2026 fix record as 2007.
