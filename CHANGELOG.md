@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`m241 logs download`** — read the track log off the device over PMTK182.
+  Logging is paused for the transfer and resumed afterwards, even on failure.
+  Measured on hardware: 0x800-byte chunks, hex address/length fields.
+- **`m241 logs geotag`** — match photos to track points by capture time and
+  emit an exiftool argument file (or CSV/JSON). Reads EXIF
+  `DateTimeOriginal` directly, falls back to the file mtime, applies a camera
+  UTC offset, and skips photos whose nearest track point is too far away.
+- **`docs/12-photo-geotagging.md`** — the end-to-end workflow, including why
+  the firmware patch has to come first and how to handle a log recorded before
+  the patch.
+- 19 tests covering the PMTK182 downloader and the geotagger (EXIF parsing,
+  matching, gap limits, output formats).
+
+
 ### Fixed
 
 Everything below was found while flashing a real M-241 end to end. The previous

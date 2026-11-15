@@ -21,6 +21,7 @@ Read in this order if you are new:
 | 09 | [`09-verification.md`](09-verification.md) | how each claim in this repo was checked (and what was not) |
 | 10 | [`10-hardware-session-notes.md`](10-hardware-session-notes.md) | the chronological log of the hardware bring-up |
 | 11 | [`11-feature-matrix.md`](11-feature-matrix.md) | which advertised features still work in 2026 (Bluetooth, ezTour, capacity) |
+| 12 | [`12-photo-geotagging.md`](12-photo-geotagging.md) | download a track and geotag photos by capture time |
 
 Reference material for contributors:
 

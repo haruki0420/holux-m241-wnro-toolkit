@@ -1654,6 +1654,183 @@ def _cmd_logs_read(args: argparse.Namespace, ui: _Ui) -> int:
     return EXIT_OK
 
 
+def _cmd_logs_download(args: argparse.Namespace, ui: _Ui) -> int:
+    """Read the track log off the device over PMTK and save it raw."""
+    from m241.logfile.download import LogDownloader, LogDownloadError
+
+    port = _resolve_port(args.port)
+    output = Path(args.output)
+    if output.exists() and not args.force:
+        raise _CliError(
+            EXIT_SAFETY,
+            f"{output} already exists",
+            "pass --force to overwrite, or choose another -o path",
+        )
+
+    serial_port = _open_serial(port, args.nmea_baud)
+    try:
+        downloader = LogDownloader(serial_port, chunk=args.chunk, timeout=args.timeout)
+        try:
+            status = downloader.status()
+        except LogDownloadError as exc:
+            raise _CliError(EXIT_HARDWARE, str(exc), "check 'm241 ports'") from exc
+
+        ui.debug(
+            f"log: {status.used_bytes} bytes used, "
+            f"logging {'on' if status.enabled else 'off'}, "
+            f"mode word 0x{status.interval_raw:08X}"
+        )
+        if status.used_bytes == 0:
+            ui.warn("the device reports an empty log; nothing to download")
+            data = b""
+        else:
+            try:
+                data = downloader.download(
+                    progress_cb=ui.progress, length=args.length
+                )
+            except LogDownloadError as exc:
+                raise _CliError(
+                    EXIT_HARDWARE,
+                    str(exc),
+                    "the log may be partially written; retry, and keep the "
+                    "logger still while it transfers",
+                ) from exc
+    finally:
+        with contextlib.suppress(Exception):
+            serial_port.close()
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(data)
+
+    document = {
+        "port": port,
+        "output": str(output),
+        "bytes": len(data),
+        "reported": status.used_bytes,
+        "logging_was_enabled": status.enabled,
+        "mode_word": f"0x{status.interval_raw:08X}",
+    }
+    if args.json:
+        ui.emit_json(document)
+        return EXIT_OK
+
+    ui.result(f"port     : {port}")
+    ui.result(f"output   : {output}")
+    ui.result(f"bytes    : {len(data)}")
+    ui.result(f"reported : {status.used_bytes}")
+    if data:
+        ui.result("next     : m241 logs read " + str(output) + " --format gpx -o track.gpx")
+    return EXIT_OK
+
+
+def _parse_utc_offset(text: str) -> timedelta:
+    """Parse ``+09:00`` / ``-0500`` / ``0`` into a timedelta."""
+    raw = str(text).strip()
+    if raw.lower() in ("local", ""):
+        return timedelta(seconds=-time.timezone)
+    sign = 1
+    if raw.startswith(("+", "-")):
+        sign = -1 if raw[0] == "-" else 1
+        raw = raw[1:]
+    raw = raw.replace(":", "")
+    if not raw:
+        raise argparse.ArgumentTypeError("empty UTC offset")
+    try:
+        if len(raw) <= 2:
+            hours, minutes = int(raw), 0
+        else:
+            hours, minutes = int(raw[:-2]), int(raw[-2:])
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"bad UTC offset {text!r}") from exc
+    if hours > 14 or minutes > 59:
+        raise argparse.ArgumentTypeError(f"UTC offset out of range: {text!r}")
+    return sign * timedelta(hours=hours, minutes=minutes)
+
+
+def _cmd_logs_geotag(args: argparse.Namespace, ui: _Ui) -> int:
+    """Match photos to track points and emit an exiftool argument file."""
+    from m241.logfile import read_log_file
+    from m241.logfile.geotag import (
+        GeotagError,
+        collect_photos,
+        format_csv,
+        format_exiftool_args,
+        format_json,
+        match_photos,
+        read_photo_time,
+    )
+
+    track_path = Path(args.track)
+    if not track_path.is_file():
+        raise _CliError(EXIT_ERROR, f"track log not found: {track_path}")
+
+    try:
+        dump = read_log_file(track_path)
+    except M241Error as exc:
+        raise _CliError(EXIT_ERROR, f"cannot parse {track_path}: {exc}") from exc
+
+    shift = timedelta(days=args.shift_days)
+    track = [
+        (record.utc + shift, record.lat, record.lon, record.height_m)
+        for record in dump.records
+        if record.utc is not None and record.lat is not None and record.lon is not None
+    ]
+    if not track:
+        raise _CliError(
+            EXIT_ERROR,
+            f"{track_path} contains no positioned records",
+            "check 'm241 logs info' on the file",
+        )
+    ui.debug(f"track: {len(track)} positioned points")
+
+    try:
+        photo_paths = collect_photos([Path(p) for p in args.photos], recursive=args.recursive)
+    except GeotagError as exc:
+        raise _CliError(EXIT_ERROR, str(exc)) from exc
+    if not photo_paths:
+        raise _CliError(EXIT_ERROR, "no photos found", "pass files or a directory")
+
+    photos = [read_photo_time(path) for path in photo_paths]
+    with_time = sum(1 for photo in photos if photo.ok)
+    ui.debug(f"photos: {len(photos)} ({with_time} with a capture time)")
+
+    try:
+        matches, skipped = match_photos(
+            photos,
+            track,
+            utc_offset=args.utc_offset,
+            max_gap_seconds=args.max_gap,
+        )
+    except GeotagError as exc:
+        raise _CliError(EXIT_ERROR, str(exc)) from exc
+
+    for path, reason in skipped:
+        ui.warn(f"skipped {path.name}: {reason}")
+
+    if args.format == "exiftool":
+        payload = format_exiftool_args(matches)
+    elif args.format == "csv":
+        payload = format_csv(matches)
+    else:
+        payload = format_json(matches)
+
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload, encoding="utf-8")
+        ui.result(f"wrote {args.format} to {output}")
+    else:
+        sys.stdout.write(payload)
+
+    ui.result(f"matched  : {len(matches)}")
+    ui.result(f"skipped  : {len(skipped)}")
+    if matches:
+        ui.result(f"max gap  : {max(m.gap_seconds for m in matches):.1f}s")
+    if args.format == "exiftool" and args.output:
+        ui.result("next     : exiftool -@ " + str(args.output))
+    return EXIT_OK if matches else EXIT_ERROR
+
+
 def _cmd_logs_capacity(args: argparse.Namespace, ui: _Ui) -> int:
     from m241.logfile.capacity import capacity, record_bytes_for_version
 
@@ -2361,6 +2538,62 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict", action="store_true",
                    help="fail on a bad CRC or a truncated record")
     p.set_defaults(func=_cmd_logs_read)
+
+    p = logs_sub.add_parser(
+        "download",
+        parents=[common],
+        help="read the track log off the device (over PMTK)",
+        description=(
+            "Download the binary track log from a connected logger. Logging is "
+            "paused for the transfer and resumed afterwards."
+        ),
+    )
+    _add_json_option(p)
+    p.add_argument("port", nargs="?", default="auto", metavar="PORT",
+                   help="serial port, or 'auto' (default)")
+    p.add_argument("-o", "--output", metavar="FILE", required=True,
+                   help="file to write the raw log to")
+    p.add_argument("--force", action="store_true",
+                   help="overwrite an existing output file")
+    p.add_argument("--chunk", type=lambda v: int(v, 0), default=0x800,
+                   metavar="BYTES",
+                   help="bytes per PMTK182 read (default 0x800)")
+    p.add_argument("--timeout", type=float, default=5.0, metavar="SECONDS",
+                   help="per-command reply timeout (default 5.0)")
+    p.add_argument("--length", type=lambda v: int(v, 0), default=None,
+                   metavar="BYTES",
+                   help="override the byte count to read (default: ask the device)")
+    p.add_argument("--nmea-baud", type=int, default=DEFAULT_NMEA_BAUD,
+                   metavar="BAUD", help="NMEA baud rate (default 38400)")
+    p.set_defaults(func=_cmd_logs_download)
+
+    p = logs_sub.add_parser(
+        "geotag",
+        parents=[common],
+        help="match photos to track points by capture time",
+        description=(
+            "Read each photo's EXIF capture time, find the nearest track point, "
+            "and emit an exiftool argument file (or CSV/JSON)."
+        ),
+    )
+    p.add_argument("track", metavar="TRACK", help="raw log dump (from 'logs download')")
+    p.add_argument("photos", nargs="+", metavar="PHOTO",
+                   help="photo files or directories")
+    p.add_argument("--format", default="exiftool",
+                   choices=("exiftool", "csv", "json"),
+                   help="output format (default: exiftool)")
+    p.add_argument("-o", "--output", metavar="FILE",
+                   help="write to FILE instead of stdout")
+    p.add_argument("--utc-offset", type=_parse_utc_offset, default=timedelta(0),
+                   metavar="HH:MM",
+                   help="camera timezone offset from UTC (default 0, e.g. +09:00)")
+    p.add_argument("--shift-days", type=float, default=0.0, metavar="DAYS",
+                   help="shift track times before matching (7168 for an unpatched log)")
+    p.add_argument("--max-gap", type=float, default=300.0, metavar="SECONDS",
+                   help="skip photos further than this from a track point (default 300)")
+    p.add_argument("--recursive", action="store_true",
+                   help="descend into photo directories")
+    p.set_defaults(func=_cmd_logs_geotag)
 
     p = logs_sub.add_parser(
         "capacity",

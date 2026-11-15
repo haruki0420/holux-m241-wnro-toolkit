@@ -5,6 +5,8 @@ Public API::
     from m241.logfile import read_log_dump, read_log_file, LogDump, LogRecord
     from m241.logfile import capacity, capacity_table, record_bytes_for_version
     from m241.logfile import export, EXPORTERS
+    from m241.logfile import LogDownloader, download_log
+    from m241.logfile import match_photos, read_photo_time
 
 Typical use::
 
@@ -28,6 +30,7 @@ from .capacity import (
     record_bytes_for_version,
     resolve_flash,
 )
+from .download import LogDownloader, download_log
 from .export import (
     CSV_COLUMNS,
     EXPORT_FORMATS,
@@ -40,6 +43,7 @@ from .export import (
     to_kml,
     to_nmea,
 )
+from .geotag import match_photos, read_photo_time
 from .reader import (
     LogDump,
     parse_info_block,
@@ -110,20 +114,24 @@ __all__ = [
     "USABLE_PER_BLOCK",
     "BlockHeader",
     "Capacity",
+    "LogDownloader",
     "LogDump",
     "LogRecord",
     "block_header",
     "capacity",
     "capacity_table",
+    "download_log",
     "estimate_points",
     "export",
     "field_sizes",
     "flash_name_from_da",
+    "match_photos",
     "parse_info_block",
     "read_log_dump",
     "read_log_file",
     "record_bytes_for_version",
     "record_length",
+    "read_photo_time",
     "resolve_flash",
     "to_csv",
     "to_gpx",
