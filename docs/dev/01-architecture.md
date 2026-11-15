@@ -447,19 +447,12 @@ Rules: `-h` exits 0; unknown command exits 2 with usage on stderr; hardware
 commands never prompt unless `--yes` is absent **and** the action is
 destructive (`flash`); all commands are importable without opening a port.
 
-### `scripts/`
+### `scripts/` (removed)
 
-Thin compatibility shims so the three-step workflow from the original blog post
-still reads naturally:
-
-```
-scripts/dump_firmware.py     -> m241 dump
-scripts/patch_firmware.py    -> m241 patch
-scripts/flash_firmware.py    -> m241 flash
-scripts/m241.py              -> m241.cli:main
-```
-
-Each shim is ≤ 25 lines, adds `../src` to `sys.path`, and forwards `argv`.
+Earlier versions shipped four thin shims (`dump_firmware.py`, `patch_firmware.py`,
+`flash_firmware.py`, `m241.py`) so the three-step workflow from the original
+blog post still read naturally. They only forwarded to the CLI, so they were
+removed: `m241 dump`, `m241 patch` and `m241 flash` are the interface.
 
 ---
 

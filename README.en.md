@@ -435,17 +435,19 @@ version:
 ## Repository layout
 
 ```
-src/m241/
+src/m241/       the program; this is what `pip install` puts on your machine
   protocol/     MTK BootROM + Download Agent, serial port discovery, simulator
   firmware/     image parsing, version profiles, patch engine
   logfile/      MTK/Holux binary log parser, capacity maths, exporters
   nmea/         sentence parsing, WNRO repair, TCP proxy
   data/         shipped firmware profile JSON (hashes + offsets, no binaries)
   cli.py        the `m241` command
-scripts/        compatibility shims for the original dump/patch/flash workflow
-docs/           background, protocol, firmware profiles, architecture, verification
+docs/
+  user/         symptoms, install, photos, troubleshooting, quick card
+  reference/    protocol, log format, firmware offsets, CLI, features
+  dev/          architecture, verification, hardware notes, roadmap
 tests/          the whole suite runs against synthetic images and a fake device
-tools/          analysis and verification helpers (no hardware required)
+tools/          development and verification scripts (not installed)
 ```
 
 ## Contributing

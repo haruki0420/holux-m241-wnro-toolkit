@@ -208,22 +208,14 @@ hint: <suggested next command or fix>
 header fields (family, device type, build number, size, sha256) so a user can
 file a useful issue without pasting firmware bytes.
 
-## Script shims
+## Script shims (removed)
 
-`scripts/dump_firmware.py`, `scripts/patch_firmware.py`,
-`scripts/flash_firmware.py`, `scripts/m241.py` — each ≤ 25 lines:
+Earlier versions shipped four thin shims under `scripts/` so the original
+three-step blog workflow stayed greppable. They only forwarded to the CLI and
+have been removed; use the commands directly:
 
-```python
-#!/usr/bin/env python3
-"""Equivalent: m241 dump ..."""
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from m241.cli import main  # noqa: E402
-raise SystemExit(main(["dump", *sys.argv[1:]]))
 ```
-
-They must keep the original three-step blog workflow greppable:
-`scripts/dump_firmware.py PORT -o fw.bin` → `scripts/patch_firmware.py fw.bin -o
-fw_patched.bin` → `scripts/flash_firmware.py PORT --da DA --fw fw_patched.bin
---backup fw.bin --yes`.
+m241 dump PORT -o fw.bin
+m241 patch fw.bin -o fw_patched.bin
+m241 flash PORT --da DA --fw fw_patched.bin --backup fw.bin --yes
+```
