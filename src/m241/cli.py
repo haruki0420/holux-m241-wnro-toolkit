@@ -322,9 +322,17 @@ def _nmea_collect(
     timeout: float = 1.0,
     max_lines: int = 64,
 ) -> list[str]:
-    """Write *sentences* and collect reply lines until *stop_prefix* or timeout."""
+    """Write *sentences* and collect reply lines until *stop_prefix* or timeout.
+
+    Every sentence is terminated with ``\\r\\n``.  This matters: the real M-241
+    (and MTK firmware in general) only parses a PMTK command once it sees the
+    line terminator, so writing ``$PMTK605*31`` without CRLF is silently
+    ignored.  Verified on hardware -- see ``tools/diag_pmtk.py``.
+    """
     for sentence in sentences:
-        serial_port.write(sentence.encode("ascii"))
+        payload = sentence if sentence.endswith("\r\n") else sentence + "\r\n"
+        serial_port.write(payload.encode("ascii"))
+    serial_port.flush()
     lines: list[str] = []
     buffer = b""
     deadline = time.monotonic() + max(0.05, timeout)

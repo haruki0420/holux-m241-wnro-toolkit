@@ -117,6 +117,9 @@ class FakeNmeaSerial:
         self.written += data
         return len(data)
 
+    def flush(self) -> None:
+        """Real serial ports have flush(); the CLI now calls it after writing."""
+
     def close(self) -> None:
         self.closed = True
 

@@ -1,4 +1,4 @@
-﻿"""Smoke-test the built wheel in an isolated directory.
+"""Smoke-test the built wheel in an isolated directory.
 
 Run from the repository root after `python -m build`:
 
@@ -38,8 +38,17 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="m241-wheel-") as target:
         install = subprocess.run(
-            [str(VENV_PY), "-m", "pip", "install", "--quiet", "--no-deps",
-             "--target", target, wheel],
+            [
+                str(VENV_PY),
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--no-deps",
+                "--target",
+                target,
+                wheel,
+            ],
             capture_output=True,
             text=True,
         )
@@ -67,4 +76,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -145,11 +145,30 @@ weeks later, but this toolkit's profiles only carry the verified single shift.
   ([catea.tech write-up](https://catea.tech/blog/holux-m241-wnro-fix)).
 - This repository reproduces that result **deterministically against the stock
   firmware images**, and locks the output SHA256 in tests.
-- However, **no device was flashed while building this repository**. The
-  protocol layer, the patch engine and the write path are all exercised against
-  the built-in simulator, but "does it work on *your* unit" can only be proven
-  on hardware. See [`docs/09-verification.md`](docs/09-verification.md) for the
-  full list of what is and is not verified.
+- However, **no device was flashed while building this repository**.
+
+### What real hardware confirmed (and did not), as of 2026-11
+
+Tested against an actual M-241 (V1.13 / `01017-00F` / MT3318, Windows 11 +
+CP210x on COM3):
+
+| Item | Result |
+|---|---|
+| Port detection / driver | ✅ recognised as COM3 with the CP210x driver |
+| `m241 info` firmware identification | ✅ `B-core_1.20, 0043, 01017-00F` |
+| WNRO bug reproduced on hardware | ✅ observed `$GPRMC,...,010407` (2007-04-01) |
+| `nmea proxy` / `nmea repair` / `logs` / `patch` | ✅ usable (no BootROM needed) |
+| **`m241 dump` (BootROM sync)** | ❌ **could not sync on this unit** |
+
+**Because the BootROM could not be entered, the dump → patch → flash round trip
+is not yet hardware-verified.** RTS/DTR pulsing, `$PMTK180`, a full baud sweep,
+a continuous `0xA0` stream, and streaming `0xA0` across the reset edge (8
+combinations) were all tried; the chip never returned a single byte.
+
+The next step is to **capture the vendor utility's firmware-update handshake
+over USB** and identify whatever precedes BootROM entry — the approach the
+original author used. All attempts are recorded in
+[`docs/10-hardware-session-notes.md`](docs/10-hardware-session-notes.md).
 
 ### If you would rather not flash
 
