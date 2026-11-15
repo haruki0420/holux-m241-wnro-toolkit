@@ -426,8 +426,19 @@ class MtkBootRom:
         return int.from_bytes(reply, "big")
 
     def jump(self, address: int) -> None:
-        """Jump to ``address`` (opcode 0xA8); the chip does not answer."""
-        self._send_echo(self._frame(OPCODE_JUMP, address, 0), "jump header")
+        """Jump to ``address`` (opcode 0xA8).
+
+        Measured on hardware: the chip echoes only part of the frame and then
+        hands control over, so the echo cannot be required the way the other
+        commands require it.  The frame is therefore written in one go and
+        nothing is read here -- whatever the chip sends next (the DA's info
+        report, for instance) belongs to the caller.
+        """
+        serial_port = self._ensure_open()
+        serial_port.write(self._frame(OPCODE_JUMP, address, 0))
+        flush = getattr(serial_port, "flush", None)
+        if flush is not None:
+            flush()
 
     def write16(
         self,
