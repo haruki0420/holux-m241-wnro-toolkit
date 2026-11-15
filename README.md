@@ -456,6 +456,7 @@ tools/          解析・検証用スクリプト（実機不要）
 | ログ形式を解析したい | [`docs/02-log-format.md`](docs/02-log-format.md) |
 | どの機能がまだ使えるか知りたい | [`docs/11-feature-matrix.md`](docs/11-feature-matrix.md) |
 | 写真に位置情報を付けたい | [`docs/12-photo-geotagging.md`](docs/12-photo-geotagging.md) |
+| コードを変更したい | [`AGENTS.md`](AGENTS.md) |
 | V1.12/V1.13 のオフセット根拠 | [`docs/04-firmware-profiles.md`](docs/04-firmware-profiles.md) |
 | 貢献したい | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 

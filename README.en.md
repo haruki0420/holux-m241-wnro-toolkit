@@ -23,6 +23,7 @@ M-241** GPS logger:
 > Background and the physics of the bug: [`docs/00-background.md`](docs/00-background.md).
 > Which advertised features still work in 2026: [`docs/11-feature-matrix.md`](docs/11-feature-matrix.md).
 > Geotagging photos from a track log: [`docs/12-photo-geotagging.md`](docs/12-photo-geotagging.md).
+> Changing the code? Read [`AGENTS.md`](AGENTS.md) first.
 
 ---
 

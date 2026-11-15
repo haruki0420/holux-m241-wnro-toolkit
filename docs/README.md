@@ -34,6 +34,9 @@ Reference material for contributors:
 
 Other top-level files:
 
+- [../AGENTS.md](../AGENTS.md) - working notes for automated contributors
+  (safety rules, verified hardware facts, protocol gotchas)
+
 - [`../DISCLAIMER.md`](../DISCLAIMER.md) — **read before flashing anything**
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — how to add a firmware profile or report hardware
 - [`../SECURITY.md`](../SECURITY.md) — how to report a vulnerability
