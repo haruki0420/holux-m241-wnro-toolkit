@@ -88,27 +88,54 @@ Practical limits in 2026:
 Bluetooth was not exercised during the hardware session (all work went over
 USB), so it is marked "works, host-dependent" rather than verified.
 
-## 3a. UI language: this firmware has no Japanese
+## 3a. UI language: no Japanese in any image we have
 
-The Japanese manual lists Japanese in the language menu, but **the firmware
-images available for this unit do not contain Japanese at all**. Measured on
-all three images (V1.12 `01017-00E`, V1.13 `01017-00F`, and the dump taken from
-the retail unit):
+The Japanese manual lists Japanese in the language menu, but **no firmware image
+available for this unit contains Japanese**. Three independent checks agree.
 
-| Check | Result |
-|---|---|
-| Language names in the string table | `English`, `French`, `German` and their translations (`Anglais`, `Français`, `Allemand`, `Englisch`, `Deutsch`) |
-| Shift-JIS strings | **none** — every candidate run is byte-identical between the V1.12 and V1.13 builds, i.e. code, not text |
-| Japanese font bitmap | **none** — no dense glyph region anywhere in the image |
-| Accented characters | Latin-1 only (`ü`, `ö`, `ç`, `é`), e.g. `Zurück`, `Löschen`, `Écraser` |
+### 1. The official release notes name the supported languages
 
-So the UI offers **English / French / German**, and this is the European
-variant of the firmware. The Japanese manual describes a different regional
-build that is not part of any package we have.
+`M-241 new FW_V1.12 and utility Release Note.pdf` (dated 2008-10-01) documents
+the Bluetooth on/off feature and states which languages it was added for:
 
-This matters when following the manual: its language menu reads
-"English, 日本語", which does not match what the device shows. Use the table
-above instead.
+> 5. Add Bluetooth turn on/ turn off function (Including **TC, SC, DE, FR, EN**
+>    String)
+>   English : Bluetooth, on, off
+>   German : Bluetooth, EIN, AUS
+>   French : Bluetooth, allumez, éteinez
+
+**TC = Traditional Chinese, SC = Simplified Chinese, DE = German, FR = French,
+EN = English. There is no JP.**
+
+### 2. The firmware's language table matches the release notes
+
+The string table holds 41 entries and is **byte-identical between V1.12 and
+V1.13** (zero additions, zero removals). It contains `English`, `French`,
+`German`, `Anglais`, `Français`, `Allemand`, `Englisch`, `Deutsch`, plus the
+French strings the release notes quote verbatim (`allumez`, `éteinez`).
+
+### 3. No Japanese encoding or font anywhere
+
+| Check | V1.12 | V1.13 | retail dump |
+|---|---|---|---|
+| ISO-2022-JP escape sequences | 0 | 0 | 0 |
+| NUL-delimited Shift-JIS strings | 0 | 0 | 0 |
+| Japanese font bitmap | none | none | none |
+| Language table entries | 41 | 41 | 41 |
+
+Every "Shift-JIS hit" a naive scan reports is byte-identical between the two
+builds, which proves it is code rather than text.
+
+### What this means
+
+The UI offers **English / French / German** in the images we have. The manual's
+six-language claim (Japanese, English, Traditional Chinese, Simplified Chinese,
+German, French) does not match these builds: the release notes list five
+languages without Japanese, and the images ship three.
+
+If a Japanese SKU exists, it is a separate image that is not part of the V1.12
+or V1.13 update packages. Do not expect the manual's language menu on this
+hardware.
 
 ## 4. Software that no longer exists
 
@@ -146,8 +173,9 @@ LCD, log modes, and — with this toolkit — the date itself.
 
 **Gone:** ezTour, Mini GPS Viewer, official firmware updates, warranty.
 
-**Not present at all:** a Japanese UI. The images we have are the European
-variant (English / French / German) with no Japanese strings or font.
+**Not present at all:** a Japanese UI. The official release notes list the
+supported languages as TC / SC / DE / FR / EN -- no JP -- and the images we
+have ship English / French / German with no Japanese strings or font.
 
 **Fixed by this project:** the GPS week-number rollover, which otherwise makes
 every 2026 fix record as 2007.
