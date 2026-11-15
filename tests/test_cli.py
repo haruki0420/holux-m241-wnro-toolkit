@@ -614,6 +614,9 @@ class TestLogsCapacity:
     def test_exact_numbers(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert cli.main(["logs", "capacity"]) == 0
         out = capsys.readouterr().out
+        assert "32,512 (9.0 h)" in out
+        assert "26,009 (7.2 h)" in out
+        assert "520,192" in out
         assert "130,048 (36.1 h)" in out
         assert "104,038 (28.9 h)" in out
         assert "260,096 (72.2 h)" in out
@@ -627,6 +630,8 @@ class TestLogsCapacity:
         assert set(document) == {"rows"}
         rows = document["rows"]
         assert [(row["flash"], row["record_bytes"], row["points"]) for row in rows] == [
+            ("512K", 16, 32_512),
+            ("512K", 20, 26_009),
             ("2M", 16, 130_048),
             ("2M", 20, 104_038),
             ("4M", 16, 260_096),
@@ -640,10 +645,14 @@ class TestLogsCapacity:
             "points",
             "hours_at_interval",
         }
-        assert rows[0]["blocks"] == 32 and rows[2]["blocks"] == 64
-        assert rows[0]["usable_bytes"] == 2_080_768
-        assert rows[2]["usable_bytes"] == 4_161_536
-        assert rows[0]["hours_at_interval"] == pytest.approx(36.12, abs=0.01)
+        by_flash = {(row["flash"], row["record_bytes"]): row for row in rows}
+        assert by_flash[("512K", 16)]["blocks"] == 8
+        assert by_flash[("2M", 16)]["blocks"] == 32
+        assert by_flash[("4M", 16)]["blocks"] == 64
+        assert by_flash[("512K", 16)]["usable_bytes"] == 520_192
+        assert by_flash[("2M", 16)]["usable_bytes"] == 2_080_768
+        assert by_flash[("4M", 16)]["usable_bytes"] == 4_161_536
+        assert by_flash[("2M", 16)]["hours_at_interval"] == pytest.approx(36.12, abs=0.01)
 
     def test_firmware_and_flash_filters(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert cli.main(
@@ -660,7 +669,10 @@ class TestLogsCapacity:
     ) -> None:
         assert cli.main(["logs", "capacity", "--interval", "5", "--json"]) == 0
         rows = run_json(capsys)["rows"]
-        assert rows[0]["hours_at_interval"] == pytest.approx(130_048 * 5 / 3600, abs=0.01)
+        two_mebibyte = next(row for row in rows if row["flash"] == "2M" and row["record_bytes"] == 16)
+        assert two_mebibyte["hours_at_interval"] == pytest.approx(
+            130_048 * 5 / 3600, abs=0.01
+        )
         assert cli.main(["logs", "capacity", "--interval", "0"]) == 2
 
 

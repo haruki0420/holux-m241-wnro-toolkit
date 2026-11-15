@@ -1,9 +1,8 @@
 """Flash capacity arithmetic for Holux M-241 log dumps.
 
-The M-241 uses a parallel serial flash chip (2 MiB on the original unit,
-4 MiB on later ones) divided into 64 KiB blocks.  Each block reserves a
-0x200-byte header, so the payload area per block is ``0x10000 - 0x200``
-bytes (65024).  That gives the honest point counts::
+The M-241 divides its log flash into 64 KiB blocks.  Each block reserves a
+0x200-byte header, so the payload area per block is ``0x10000 - 0x200`` bytes
+(65024).  That gives the honest point counts::
 
     2 MiB -> 32 blocks -> 2,080,768 usable bytes
         16 B/record -> 130,048 points   (marketing: "130,000")
@@ -11,6 +10,16 @@ bytes (65024).  That gives the honest point counts::
     4 MiB -> 64 blocks -> 4,161,536 usable bytes
         16 B/record -> 260,096 points
         20 B/record -> 208,076 points
+    512 KiB -> 8 blocks -> 520,192 usable bytes
+        16 B/record -> 32,512 points
+        20 B/record -> 26,009 points
+
+The 512 KiB row exists because the download agent on a retail unit reports
+``flash_size = 0x80000`` (MX29LV400CB).  That is the chip it can program, which
+is where the firmware image lives; the log area is evidently separate or larger,
+because a unit was measured holding 212,236 bytes of log alongside a
+406,620-byte firmware image.  See ``docs/11-feature-matrix.md``.  Do not treat
+the 512 KiB row as the log capacity of a retail unit without measuring it.
 """
 
 from __future__ import annotations
@@ -21,7 +30,7 @@ from dataclasses import dataclass
 from ..errors import M241Error
 
 #: Known flash sizes in bytes, keyed by the shorthand used on the CLI.
-FLASH_SIZES: dict[str, int] = {"2M": 0x200000, "4M": 0x400000}
+FLASH_SIZES: dict[str, int] = {"512K": 0x80000, "2M": 0x200000, "4M": 0x400000}
 
 BLOCK_SIZE = 0x10000
 BLOCK_HEADER = 0x200
@@ -29,7 +38,8 @@ USABLE_PER_BLOCK = BLOCK_SIZE - BLOCK_HEADER  # 65024
 
 #: DA flash device ids (``flash_device_id`` from the DA info report) -> size key.
 KNOWN_FLASH_DEVICE_IDS: dict[int, str] = {
-    0x22BA: "2M",  # MXIC MX29LV320-class, 2 MiB (observed on a V1.13 M-241)
+    0x22BA: "2M",  # MXIC MX29LV320-class, 2 MiB
+    0x49: "512K",  # MXIC MX29LV400CB, 512 KiB (measured on a retail M-241)
 }
 
 #: Documented record sizes of the two firmware families.
@@ -167,9 +177,9 @@ def capacity(flash: str | int, record_bytes: int, *, interval_s: float | None = 
 
 
 def capacity_table(*, interval_s: float | None = None) -> list[Capacity]:
-    """Return the 2M/4M x 16B/20B capacity table in a stable order."""
+    """Return the 512K/2M/4M x 16B/20B capacity table in a stable order."""
     rows: list[Capacity] = []
-    for flash in ("2M", "4M"):
+    for flash in ("512K", "2M", "4M"):
         for record_bytes in (RECORD_BYTES_V112, RECORD_BYTES_V113):
             rows.append(capacity(flash, record_bytes, interval_s=interval_s))
     return rows

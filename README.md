@@ -454,6 +454,7 @@ tools/          解析・検証用スクリプト（実機不要）
 | 危険性を知りたい | [`DISCLAIMER.md`](DISCLAIMER.md) |
 | プロトコルを実装したい | [`docs/01-protocol.md`](docs/01-protocol.md) |
 | ログ形式を解析したい | [`docs/02-log-format.md`](docs/02-log-format.md) |
+| どの機能がまだ使えるか知りたい | [`docs/11-feature-matrix.md`](docs/11-feature-matrix.md) |
 | V1.12/V1.13 のオフセット根拠 | [`docs/04-firmware-profiles.md`](docs/04-firmware-profiles.md) |
 | 貢献したい | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 

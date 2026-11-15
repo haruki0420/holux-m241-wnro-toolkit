@@ -18,6 +18,8 @@ from m241.logfile import (
     resolve_flash,
 )
 
+POINTS_512K_16 = 32_512
+POINTS_512K_20 = 26_009
 POINTS_2M_16 = 130_048
 POINTS_2M_20 = 104_038
 POINTS_4M_16 = 260_096
@@ -32,10 +34,11 @@ def test_geometry_constants() -> None:
     assert BLOCK_HEADER == 0x200
     assert USABLE_PER_BLOCK == 65_024
     assert USABLE_PER_BLOCK == BLOCK_SIZE - BLOCK_HEADER
-    assert FLASH_SIZES == {"2M": 0x200000, "4M": 0x400000}
+    assert FLASH_SIZES == {"512K": 0x80000, "2M": 0x200000, "4M": 0x400000}
 
 
 def test_usable_bytes_totals() -> None:
+    assert 8 * USABLE_PER_BLOCK == 520_192
     assert 32 * USABLE_PER_BLOCK == 2_080_768
     assert 64 * USABLE_PER_BLOCK == 4_161_536
 
@@ -46,6 +49,8 @@ def test_usable_bytes_totals() -> None:
 @pytest.mark.parametrize(
     ("flash", "record_bytes", "blocks", "usable", "points"),
     [
+        ("512K", 16, 8, 520_192, POINTS_512K_16),
+        ("512K", 20, 8, 520_192, POINTS_512K_20),
         ("2M", 16, 32, 2_080_768, POINTS_2M_16),
         ("2M", 20, 32, 2_080_768, POINTS_2M_20),
         ("4M", 16, 64, 4_161_536, POINTS_4M_16),
@@ -66,19 +71,24 @@ def test_capacity_numbers(
 def test_capacity_table_order_and_values() -> None:
     table = capacity_table()
     assert [(row.flash_name, row.record_bytes) for row in table] == [
+        ("512K", 16),
+        ("512K", 20),
         ("2M", 16),
         ("2M", 20),
         ("4M", 16),
         ("4M", 20),
     ]
     assert [row.points for row in table] == [
+        POINTS_512K_16,
+        POINTS_512K_20,
         POINTS_2M_16,
         POINTS_2M_20,
         POINTS_4M_16,
         POINTS_4M_20,
     ]
     # The marketing "130,000 points" is only reachable at 16 B.
-    assert table[0].points >= 130_000 > table[1].points
+    two_mebibyte = [row for row in table if row.flash_name == "2M"]
+    assert two_mebibyte[0].points >= 130_000 > two_mebibyte[1].points
 
 
 def test_capacity_accepts_byte_count_and_hex() -> None:

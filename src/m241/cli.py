@@ -1662,7 +1662,7 @@ def _cmd_logs_capacity(args: argparse.Namespace, ui: _Ui) -> int:
     record_sizes = (16, 20)
     if args.firmware:
         record_sizes = (record_bytes_for_version(args.firmware),)
-    flashes = ("2M", "4M") if args.flash == "all" else (args.flash,)
+    flashes = ("512K", "2M", "4M") if args.flash == "all" else (args.flash,)
 
     rows = []
     for flash in flashes:
@@ -2369,7 +2369,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Print the exact point capacity of 2 MiB and 4 MiB flash.",
     )
     _add_json_option(p)
-    p.add_argument("--flash", default="all", choices=("2M", "4M", "all"),
+    p.add_argument("--flash", default="all", choices=("512K", "2M", "4M", "all"),
                    help="flash size to report (default: all)")
     p.add_argument("--firmware", default=None, choices=("V1.12", "V1.13"),
                    help="only report the record size of this firmware version")
