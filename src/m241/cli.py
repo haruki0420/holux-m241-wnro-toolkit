@@ -1747,6 +1747,73 @@ def _parse_utc_offset(text: str) -> timedelta:
     return sign * timedelta(hours=hours, minutes=minutes)
 
 
+def _cmd_logs_erase(args: argparse.Namespace, ui: _Ui) -> int:
+    """Erase the track log on the device (destructive)."""
+    from m241.logfile.download import LogDownloadError, LogEraseError, erase_log
+
+    port = _resolve_port(args.port)
+
+    # Refuse to destroy a log the user has not saved.
+    if args.require_backup:
+        backup = Path(args.require_backup)
+        if not backup.is_file() or backup.stat().st_size == 0:
+            raise _CliError(
+                EXIT_SAFETY,
+                f"--require-backup {backup} does not exist or is empty",
+                "download the log first: m241 logs download PORT -o track.bin",
+            )
+
+    serial_port = _open_serial(port, args.nmea_baud)
+    try:
+        from m241.logfile.download import LogDownloader
+
+        try:
+            status = LogDownloader(serial_port, timeout=args.timeout).status()
+        except LogDownloadError as exc:
+            raise _CliError(EXIT_HARDWARE, str(exc), "check 'm241 ports'") from exc
+        ui.result(f"port     : {port}")
+        ui.result(f"log size : {status.used_bytes} bytes")
+
+        if status.used_bytes == 0:
+            ui.result("the log is already empty; nothing to erase")
+            return EXIT_OK
+
+        if not args.yes:
+            if not sys.stdin.isatty():
+                raise _CliError(
+                    EXIT_SAFETY,
+                    "refusing to erase without confirmation",
+                    "pass --yes in a non-interactive shell",
+                )
+            ui.result("")
+            ui.result("This permanently erases the track log on the device.")
+            ui.result("Type ERASE to continue: ")
+            answer = sys.stdin.readline().strip()
+            if answer != "ERASE":
+                ui.warn("aborted; the log was not touched")
+                return EXIT_SAFETY
+
+        try:
+            freed = erase_log(serial_port, timeout=args.timeout)
+        except (LogEraseError, LogDownloadError) as exc:
+            raise _CliError(
+                EXIT_HARDWARE,
+                str(exc),
+                "power-cycle the logger and retry",
+            ) from exc
+    finally:
+        with contextlib.suppress(Exception):
+            serial_port.close()
+
+    document = {"port": port, "erased_bytes": freed}
+    if args.json:
+        ui.emit_json(document)
+        return EXIT_OK
+    ui.result(f"erased   : {freed} bytes")
+    ui.result("the logger is ready to record again")
+    return EXIT_OK
+
+
 def _cmd_logs_geotag(args: argparse.Namespace, ui: _Ui) -> int:
     """Match photos to track points and emit an exiftool argument file."""
     from m241.logfile import read_log_file
@@ -2566,6 +2633,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--nmea-baud", type=int, default=DEFAULT_NMEA_BAUD,
                    metavar="BAUD", help="NMEA baud rate (default 38400)")
     p.set_defaults(func=_cmd_logs_download)
+
+    p = logs_sub.add_parser(
+        "erase",
+        parents=[common],
+        help="erase the track log on the device (DESTRUCTIVE)",
+        description=(
+            "Permanently erase the track log. Logging is paused and resumed "
+            "around the erase. Requires confirmation, or --yes."
+        ),
+    )
+    _add_json_option(p)
+    p.add_argument("port", nargs="?", default="auto", metavar="PORT",
+                   help="serial port, or 'auto' (default)")
+    p.add_argument("--yes", action="store_true",
+                   help="skip the interactive confirmation")
+    p.add_argument("--require-backup", metavar="FILE", default=None,
+                   help="refuse unless this downloaded log exists and is non-empty")
+    p.add_argument("--timeout", type=float, default=5.0, metavar="SECONDS",
+                   help="per-command reply timeout (default 5.0)")
+    p.add_argument("--nmea-baud", type=int, default=DEFAULT_NMEA_BAUD,
+                   metavar="BAUD", help="NMEA baud rate (default 38400)")
+    p.set_defaults(func=_cmd_logs_erase)
 
     p = logs_sub.add_parser(
         "geotag",

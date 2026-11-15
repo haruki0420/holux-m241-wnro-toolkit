@@ -111,6 +111,10 @@ class FakeLogDevice:
             self.enabled = True
             self._emit("$PMTK001,182,4,3")
             return
+        if sub == "6":
+            self.payload = b""
+            self._emit("$PMTK001,182,6,3")
+            return
         if sub == "7" and len(fields) >= 4:
             address = int(fields[2], 16)
             length = int(fields[3], 16)
@@ -336,3 +340,56 @@ def test_csv_and_json_formats() -> None:
 
 def test_geotag_error_is_an_m241_error() -> None:
     assert issubclass(GeotagError, M241Error)
+
+# ---------------------------------------------------------------------------
+# erase
+# ---------------------------------------------------------------------------
+
+
+def test_erase_stops_logging_erases_and_restarts() -> None:
+    from m241.logfile.download import erase_log
+
+    device = FakeLogDevice(b"\xAA" * 0x400)
+    freed = erase_log(device)
+    assert freed == 0x400
+    assert any(command.startswith("PMTK182,6") for command in device.commands)
+    assert device.enabled is True
+
+
+def test_erase_reports_the_freed_size() -> None:
+    from m241.logfile.download import erase_log
+
+    device = FakeLogDevice(b"\x00" * 0x1234)
+    assert erase_log(device) == 0x1234
+
+
+def test_erase_refuses_when_the_device_does_not_clear() -> None:
+    from m241.logfile.download import LogEraseError, erase_log
+
+    class Stubborn(FakeLogDevice):
+        def _handle(self, line: str) -> None:
+            body = line[1:].split("*")[0]
+            if body.startswith("PMTK182,6"):
+                self.commands.append(body)
+                self._emit("$PMTK001,182,6,3")
+                return
+            super()._handle(line)
+
+    with pytest.raises(LogEraseError, match="still reports"):
+        erase_log(Stubborn(b"\xAA" * 0x100))
+
+
+def test_erase_refuses_when_the_device_rejects_it() -> None:
+    from m241.logfile.download import LogEraseError, erase_log
+
+    class Refusing(FakeLogDevice):
+        def _handle(self, line: str) -> None:
+            body = line[1:].split("*")[0]
+            if body.startswith("PMTK182,6"):
+                self.commands.append(body)
+                self._emit("$PMTK001,182,6,0")
+                return
+            super()._handle(line)
+
+    with pytest.raises(LogEraseError, match="refused"):
+        erase_log(Refusing(b"\xAA" * 0x100))

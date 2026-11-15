@@ -176,6 +176,31 @@ photo,utc,lat,lon,height_m,gap_seconds
 "photos/IMG_0001.jpg",2026-11-15T01:20:31+00:00,35.6812360,139.7671250,44.12,0.0
 ```
 
+## 6a. Free the space afterwards
+
+Once the log is downloaded and the photos are tagged, the device can start a new
+track. The log is a circular buffer, so it overwrites itself when full — but if
+you want to start clean:
+
+```bash
+m241 logs erase COM3 --require-backup track.bin
+```
+
+```
+port     : COM3
+log size : 212860 bytes
+
+This permanently erases the track log on the device.
+Type ERASE to continue:
+```
+
+`--require-backup` makes the command refuse unless the file you name exists and
+is non-empty, so a typo cannot destroy a log you meant to keep. Pass `--yes` to
+skip the prompt in a script.
+
+Erasing is optional: `Setting → Log record → Overwrite` on the device makes the
+logger reuse the oldest space by itself.
+
 ## 7. A GPX track for maps
 
 ```bash

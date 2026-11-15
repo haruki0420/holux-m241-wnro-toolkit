@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`m241 logs download`** — read the track log off the device over PMTK182.
   Logging is paused for the transfer and resumed afterwards, even on failure.
   Measured on hardware: 0x800-byte chunks, hex address/length fields.
+- **`m241 logs erase`** — erase the track log on the device. Requires
+  confirmation (or `--yes`), and `--require-backup FILE` refuses unless the
+  log you meant to keep is already on disk. Logging is paused and resumed
+  around the erase.
 - **`m241 logs geotag`** — match photos to track points by capture time and
   emit an exiftool argument file (or CSV/JSON). Reads EXIF
   `DateTimeOriginal` directly, falls back to the file mtime, applies a camera

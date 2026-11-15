@@ -248,3 +248,43 @@ def download_log(
     return LogDownloader(serial_port, chunk=chunk, timeout=timeout).download(
         progress_cb=progress_cb, length=length
     )
+
+
+#: Reply the device sends when it accepted a log command (status 3 = OK).
+_ACCEPTED = ",3"
+
+
+class LogEraseError(M241Error):
+    """The device refused to erase its log."""
+
+
+def erase_log(serial_port: Any, *, timeout: float = DEFAULT_TIMEOUT) -> int:
+    """Erase the track log on the device and return the bytes freed.
+
+    The device must have logging disabled; this function stops it, issues
+    ``$PMTK182,6`` (erase), then re-enables logging.  **This destroys the log**,
+    so callers must confirm with the user first.
+
+    Returns the number of bytes the device reported as used before the erase.
+    """
+    downloader = LogDownloader(serial_port, timeout=timeout)
+    status = downloader.status()
+    used = status.used_bytes
+
+    downloader._disable_logging()
+    try:
+        reply = downloader._command("$PMTK182,6", expect="$PMTK001,182,6", timeout=timeout)
+        if reply is None:
+            raise LogEraseError("the device did not answer $PMTK182,6 (log erase)")
+        if _ACCEPTED not in reply:
+            raise LogEraseError(f"the device refused to erase the log: {reply!r}")
+    finally:
+        downloader._enable_logging()
+
+    # Confirm the erase actually happened.
+    after = downloader.status()
+    if after.used_bytes > 0 and used > 0:
+        raise LogEraseError(
+            f"the device still reports {after.used_bytes} bytes of log after erasing"
+        )
+    return used

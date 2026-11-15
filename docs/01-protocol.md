@@ -25,6 +25,10 @@ Commands the toolkit uses:
 | `$PMTK182,2,8*33` | log usage (log must be disabled) | `$PMTK182,3,8,<hex addr>` |
 | `$PMTK182,7,<addr>,<len>` | read log bytes | `$PMTK182,8,<addr>,<hex data>` |
 | `$PMTK182,4` / `,5` / `,6` | log enable / disable / erase | `$PMTK001,182,n,3` |
+
+`m241 logs download` uses `,5` and `,4` around the transfer, and
+`m241 logs erase` uses `,6`. All three require logging to be stopped first;
+the toolkit always resumes it in a `finally` block.
 | `$PMTK715`/`716`/`717` | undocumented aiding (time / position / both) | `$PMTK001,nnn,3` |
 
 The aiding commands are a bonus find from the original analysis;
