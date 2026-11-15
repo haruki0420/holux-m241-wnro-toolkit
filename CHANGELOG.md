@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-11-16
+
 ### Added
 
 - **`m241 logs download`** — read the track log off the device over PMTK182.
@@ -92,11 +94,16 @@ release could dump and patch, but its **write path did not work on hardware**.
   chunk also used to return truncated data as success; the loop now continues
   from the advanced address and raises if the total falls short.
 
-### Added
+### Tests
 
 - **Hardware-shaped regression tests**: a full 406,620-byte image write
   (1,588 packets + a 92-byte tail), `0xD3` status-byte consumption, and a
   non-zero status report.
+- **Safety regression tests**: the NMEA-first probe returns `True`/`False`/
+  `None`, and `start()` refuses to pulse the reset lines on `True` and on
+  `None`.
+- **Hardware-default regression tests**: `m241 dump` defaults to
+  `0x00200000`, and `0x22BA` is rejected as a byte `flash_device_id`.
 - `docs/reference/01-protocol.md` rewritten with the measured values, including
   the one-byte echo lag, the two-byte `0xD3` reply, the real 512 KiB flash size,
   and a recovery procedure for an interrupted flash.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "m241-wnro-toolkit"
-version = "1.0.0"
+version = "1.0.1"
 description = "Cross-platform (Windows/Linux/macOS) toolkit for the Holux M-241 GPS logger: MTK BootROM/DA flashing, GPS week-number-rollover firmware patch, log download/conversion and NMEA repair."
 readme = "README.md"
 requires-python = ">=3.10"
