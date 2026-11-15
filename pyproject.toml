@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m241-wnro-toolkit"
+version = "1.0.0"
+description = "Cross-platform (Windows/Linux/macOS) toolkit for the Holux M-241 GPS logger: MTK BootROM/DA flashing, GPS week-number-rollover firmware patch, log download/conversion and NMEA repair."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "holux-m241-wnro-toolkit contributors" }]
+keywords = ["holux", "m241", "gps", "wnro", "mtk", "mt3318", "firmware", "logger"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Hardware",
+    "Topic :: Utilities",
+]
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+m241 = "m241.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/haruki0420/holux-m241-wnro-toolkit#readme"
+Source = "https://github.com/haruki0420/holux-m241-wnro-toolkit"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+m241 = ["data/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-q"
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:m241.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501", "SIM108"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/**" = ["E402", "F401"]
+"tests/**" = ["B011"]

@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "description": "Manifest of the official Holux M-241 vendor drop. Used by `m241 doctor --from-drop` to identify and verify the proprietary files the toolkit needs. No proprietary bytes are stored here - only hashes, sizes and relative paths.",
+  "note": "Paths are relative to the drop root and matched case-insensitively by basename, because the vendor zips use inconsistent directory names (and mixed spaces/underscores).",
+  "files": [
+    {
+      "role": "download_agent",
+      "basename": "DA_v3.8.4.bin",
+      "size": 14896,
+      "sha256": "190d7064cf2320752d8eb65681142730b21cddc90e0d1491d4e8379c3f2e89aa",
+      "required_for": ["flash"],
+      "loaded_at": "0x00100800",
+      "provenance": "Holux Logger Utility 1.1.0.47 / 1.1.0.48",
+      "note": "MTK Download Agent. Proprietary - never redistribute. Load address confirmed by `push 0x100800` at file offset 0xB7B0 of HoluxLoggerUtility.exe."
+    },
+    {
+      "role": "vendor_brom",
+      "basename": "brom.dll",
+      "size": 245760,
+      "sha256": "a62e692f410d718570f19eb4f45591049fe8a687c1b309a4f19bfe3bcf776ed5",
+      "required_for": [],
+      "provenance": "Holux Logger Utility 1.1.0.47 / 1.1.0.48",
+      "note": "Reference BootROM driver. Not loaded by this toolkit; kept in the manifest only so `doctor` can identify a drop."
+    },
+    {
+      "role": "flash_table",
+      "basename": "brom.ini",
+      "size": 364,
+      "sha256": "3741703327fb9cf909380e0e2a7e0f3c9e669d8ca400fbd31f402d00592adbdd",
+      "required_for": [],
+      "provenance": "Holux Logger Utility 1.1.0.47 / 1.1.0.48",
+      "note": "Flash device id -> part name table (ids 70..84)."
+    },
+    {
+      "role": "utility",
+      "basename": "HoluxLoggerUtility.exe",
+      "size": 1187840,
+      "sha256": "7b7dcb89ce08cb980a467de612205b176a8c10899b7b2902e8ac7981855733fa",
+      "required_for": [],
+      "provenance": "Holux Logger Utility 1.1.0.47",
+      "note": "Vendor GUI shipped with firmware V1.12. Not executed by this toolkit."
+    },
+    {
+      "role": "utility",
+      "basename": "HoluxLoggerUtility.exe",
+      "size": 1187840,
+      "sha256": "0360fd2eb1e5775256c82eb044c720a551c2acd7d5e76b1d5d02a23899cd4ec8",
+      "required_for": [],
+      "provenance": "Holux Logger Utility 1.1.0.48",
+      "note": "Vendor GUI shipped with firmware V1.13. Not executed by this toolkit."
+    },
+    {
+      "role": "firmware",
+      "basename": "01017-01B MBGPS_2.02B1.20,38400, GGA,GSA,GSV,VTG,RMC_V1.12_GR-241_HLX.bin",
+      "size": 406312,
+      "sha256": "4103601a29f256ae5da771bbcbc3ca85a89deb6268ce74865dc84b2583ae98f7",
+      "required_for": [],
+      "provenance": "M-241 Firmware V1.12 update package",
+      "note": "Stock V1.12 image. Proprietary. Used as a patch-profile reference; not needed if you dumped your own unit.",
+      "profile": "v1.12"
+    },
+    {
+      "role": "firmware",
+      "basename": "01017-01C MBGPS_2.02B1.20,38400, GGA,GSA,GSV,VTG,RMC_V1.13_GR-241_HLX.bin",
+      "size": 406620,
+      "sha256": "32fe52690db9947bdbfa58caa6dba450b3f4222b23f2e045f606252649159435",
+      "required_for": [],
+      "provenance": "M-241 Firmware V1.13 update package",
+      "note": "Stock V1.13 image. Proprietary. Used as a patch-profile reference; not needed if you dumped your own unit.",
+      "profile": "v1.13"
+    },
+    {
+      "role": "release_note",
+      "basename": "ReleaseNote.txt",
+      "size": 1550,
+      "sha256": "782b0a1093d4d7d410897fbf08c1880cb774f8b7f91381938896321392b7ff0b",
+      "required_for": [],
+      "provenance": "M-241 Firmware V1.13 update package",
+      "note": "Documents the 16 -> 20 byte log record change and the 2M/4M flash discrimination."
+    },
+    {
+      "role": "release_note",
+      "basename": "M-241 new FW_V1.12 and utility Release Note.pdf",
+      "size": 29093,
+      "sha256": "da12519e6cc5cdf6641700d168499187704a8a32c37d9854838b3bb57b7e9762",
+      "required_for": [],
+      "provenance": "M-241 Firmware V1.12 update package"
+    },
+    {
+      "role": "driver",
+      "basename": "CP210xVCPInstaller_x64.exe",
+      "size": 1055312,
+      "sha256": "977e83f3c6774f62539156ce0d9b635003d0618ac05e4d4f530294af5d70d63a",
+      "required_for": [],
+      "provenance": "USB Cable Driver (Win10)",
+      "note": "Silicon Labs CP210x VCP driver for 64-bit Windows. Only needed on Windows."
+    },
+    {
+      "role": "driver",
+      "basename": "CP210xVCPInstaller_x86.exe",
+      "size": 929872,
+      "sha256": "d4e3d0e22a51957dace66f161cb2082389e411c16a19d789d0d1f608e9e5292b",
+      "required_for": [],
+      "provenance": "USB Cable Driver (Win10)",
+      "note": "Silicon Labs CP210x VCP driver for 32-bit Windows."
+    }
+  ],
+  "sources": {
+    "related_writeup": "https://catea.tech/blog/holux-m241-wnro-fix/",
+    "upstream_project": "https://github.com/NekobaTechnology/holux-m241-wnro-fix",
+    "log_format_reference": "https://github.com/gpsbabel/gpsbabel/blob/master/mtk_logger.cc",
+    "protocol_reference": "https://github.com/dimhoff/mt333x-fw-utils"
+  }
+}

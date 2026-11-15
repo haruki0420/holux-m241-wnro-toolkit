@@ -1,0 +1,27 @@
+# Normalise line endings so a Windows checkout and a Linux CI run see the same bytes.
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# Windows-only helpers, should anyone add them.
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary-ish files must never be normalised.
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.bin   binary
+*.whl   binary
+*.gz    binary
+
+# Never ship proprietary firmware or vendor binaries, whatever the filter says.
+*.dll   -text
+*.exe   -text
+*.sys   -text

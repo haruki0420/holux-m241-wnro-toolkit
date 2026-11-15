@@ -1,0 +1,62 @@
+# Proprietary vendor binaries and firmware images — NEVER commit these.
+# See DISCLAIMER.md and docs/ "What is not in this repository".
+# NOTE: patterns are anchored with a leading "/" where they name a top-level
+# directory, otherwise `firmware/` would also swallow src/m241/firmware/.
+*.bin
+*.BIN
+*.dll
+*.DLL
+*.exe
+*.EXE
+*.sys
+*.cat
+*.zip
+*.hex
+brom.ini
+brom.dll
+DA_v3.8.*
+HoluxLoggerUtility*
+PowerFlash*
+/firmware/
+/vendor/
+/inbox/
+/backup/
+/backups/
+
+# Local device captures (may contain your coordinates)
+captures/
+*.log
+*.pcap
+*.cap
+*.nmea
+*.dump
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local analysis scratch
+_scratch/
+tools/verify/out/

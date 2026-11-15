@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Verify the artifacts
+        run: |
+          python -c "import glob, sys, zipfile; w = glob.glob('dist/*.whl')[0]; names = set(zipfile.ZipFile(w).namelist()); required = {'m241/data/firmware_profiles.json', 'm241/data/vendor_drop.json'}; missing = sorted(required - names); print(w, 'OK' if not missing else 'MISSING ' + str(missing)); sys.exit(1 if missing else 0)"
+          python -c "import glob, sys, tarfile; s = glob.glob('dist/*.tar.gz')[0]; members = tarfile.open(s).getnames(); wanted = [n for n in members if n.endswith('src/m241/data/firmware_profiles.json') or n.endswith('src/m241/data/vendor_drop.json')]; print(s, wanted); sys.exit(0 if len(wanted) == 2 else 1)"
+      - name: Install the wheel and smoke-test the CLI
+        run: |
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          m241 --help
+          m241 selftest
+          m241 logs capacity
+          python -m m241 --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: publish GitHub release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false

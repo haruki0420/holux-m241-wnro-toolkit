@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "description": "Verified Holux M-241 (MT3318) firmware profiles. Derived from the official Holux update packages; no firmware bytes are stored here, only hashes, sizes and byte offsets. Source of truth: docs/04-firmware-profiles.md.",
+  "profiles": [
+    {
+      "name": "v1.12",
+      "display_name": "Holux M-241 firmware V1.12",
+      "sha256": [
+        "4103601a29f256ae5da771bbcbc3ca85a89deb6268ce74865dc84b2583ae98f7"
+      ],
+      "sizes": [
+        406312
+      ],
+      "version": "V1.12",
+      "version_offset": 367380,
+      "epoch_offset": 262900,
+      "epoch_constant": 315964800,
+      "log_record_bytes": 16,
+      "patched_sha256": "dad2983d95cc3be251b358b2b7d5da9272d9946e70aaa0067162a4c21475c384",
+      "notes": "Release package member 01017-01B MBGPS_2.02B1.20,38400, GGA,GSA,GSV,VTG,RMC_V1.12_GR-241_HLX.bin (size 406312 = 0x63328). 16-byte log records (no float speed). WNRO patch at 0x402F4; ASCII version marker at 0x59B14. Patched-image SHA256 is the result of the default epoch@0x402F4 + V1.14 marker patch set."
+    },
+    {
+      "name": "v1.13",
+      "display_name": "Holux M-241 firmware V1.13",
+      "sha256": [
+        "32fe52690db9947bdbfa58caa6dba450b3f4222b23f2e045f606252649159435"
+      ],
+      "sizes": [
+        406620
+      ],
+      "version": "V1.13",
+      "version_offset": 367656,
+      "epoch_offset": 262900,
+      "epoch_constant": 315964800,
+      "log_record_bytes": 20,
+      "patched_sha256": "901555843895054f77716364a446e8ad41c00b799c781b4ff95144352c141c9a",
+      "notes": "Release package member 01017-01C MBGPS_2.02B1.20,38400, GGA,GSA,GSV,VTG,RMC_V1.13_GR-241_HLX.bin (size 406620 = 0x6345C). 20-byte log records (adds a float speed field). WNRO patch at 0x402F4; ASCII version marker at 0x59C28. Patched-image SHA256 is the result of the default epoch@0x402F4 + V1.14 marker patch set."
+    }
+  ]
+}
