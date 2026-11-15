@@ -106,8 +106,10 @@ def handshake(ser: serial.Serial, timeout: float = 8.0) -> bool:
         expected = PROBE_REPLIES[index]
         if not reply or reply[0] != expected:
             got = f"0x{reply[0]:02X}" if reply else "nothing"
-            print(f"[!] step {index + 1}: sent 0x{probe:02X}, got {got} "
-                  f"(expected 0x{expected:02X})", file=sys.stderr)
+            print(
+                f"[!] step {index + 1}: sent 0x{probe:02X}, got {got} (expected 0x{expected:02X})",
+                file=sys.stderr,
+            )
             return False
     return True
 
@@ -143,14 +145,16 @@ class BootRomReader:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("port")
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--base", type=lambda x: int(x, 0), default=FIRMWARE_BASE)
     parser.add_argument("--length", type=lambda x: int(x, 0), default=None)
-    parser.add_argument("--already-synced", action="store_true",
-                        help="skip the PMTK180 + sync dance")
+    parser.add_argument(
+        "--already-synced", action="store_true", help="skip the PMTK180 + sync dance"
+    )
     args = parser.parse_args()
 
     if not args.already_synced:
@@ -197,8 +201,9 @@ def main() -> int:
             cursor += take
             remaining -= take
             pct = int(len(image) * 100 / length)
-            sys.stdout.write(f"\r      {pct:3d}%  {len(image)}/{length}  "
-                             f"({time.time() - started:.1f}s)")
+            sys.stdout.write(
+                f"\r      {pct:3d}%  {len(image)}/{length}  ({time.time() - started:.1f}s)"
+            )
             sys.stdout.flush()
         print()
     finally:
@@ -216,10 +221,8 @@ def main() -> int:
 
     # Recognise the two stock images this project ships profiles for.
     known = {
-        "4103601a29f256ae5da771bbcbc3ca85a89deb6268ce74865dc84b2583ae98f7":
-            "stock V1.12",
-        "32fe52690db9947bdbfa58caa6dba450b3f4222b23f2e045f606252649159435":
-            "stock V1.13",
+        "4103601a29f256ae5da771bbcbc3ca85a89deb6268ce74865dc84b2583ae98f7": "stock V1.12",
+        "32fe52690db9947bdbfa58caa6dba450b3f4222b23f2e045f606252649159435": "stock V1.13",
     }
     if digest in known:
         print(f"\n*** this is a KNOWN image: {known[digest]} ***")

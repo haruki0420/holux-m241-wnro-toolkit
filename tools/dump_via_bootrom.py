@@ -87,8 +87,10 @@ def handshake(ser: serial.Serial, timeout: float = 8.0) -> bool:
         reply = ser.read(1)
         if not reply or reply[0] != (probe ^ 0xFF):
             got = reply[0] if reply else None
-            print(f"  [!] probe 0x{probe:02X} -> {got} (expected 0x{probe ^ 0xFF:02X})",
-                  file=sys.stderr)
+            print(
+                f"  [!] probe 0x{probe:02X} -> {got} (expected 0x{probe ^ 0xFF:02X})",
+                file=sys.stderr,
+            )
             return False
     return True
 
@@ -143,8 +145,9 @@ class Brom:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("port")
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--base", type=lambda x: int(x, 0), default=0x20000000)
@@ -176,8 +179,10 @@ def main() -> int:
         if length is None:
             header = brom.read32(args.base + 0xF4, 4)
             declared = struct.unpack("<I", header)[0]
-            print(f"3) header at 0x{args.base + 0xF4:X}: raw={header.hex(' ')} "
-                  f"LE={declared} BE={struct.unpack('>I', header)[0]}")
+            print(
+                f"3) header at 0x{args.base + 0xF4:X}: raw={header.hex(' ')} "
+                f"LE={declared} BE={struct.unpack('>I', header)[0]}"
+            )
             if 0x1000 <= declared <= 0x400000:
                 length = declared + 4  # header stores size-4
             else:
@@ -195,8 +200,9 @@ def main() -> int:
             cursor += take
             remaining -= take
             pct = int(len(data) * 100 / length)
-            sys.stdout.write(f"\r   {pct:3d}%  {len(data)}/{length}  "
-                             f"({time.time() - started:.1f}s)")
+            sys.stdout.write(
+                f"\r   {pct:3d}%  {len(data)}/{length}  ({time.time() - started:.1f}s)"
+            )
             sys.stdout.flush()
         print()
     finally:

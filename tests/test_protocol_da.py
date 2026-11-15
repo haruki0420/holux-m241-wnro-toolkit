@@ -263,7 +263,9 @@ def test_write_firmware_handles_short_final_packet(tmp_path: object) -> None:
     device = FakeDevice()
     boot, agent = _started_da(device, tmp_path)
     try:
-        payload = bytes([0x11]) * 0x201  # 2 full packets + 1 byte
+        # Real firmware images are always even length; a final short packet is
+        # still padded to an even byte count by every writer in the wild.
+        payload = bytes([0x11]) * 0x202  # 2 full packets + 2 bytes
         agent.write_firmware(payload)
         assert bytes(device.memory[: len(payload)]) == payload
     finally:

@@ -59,9 +59,7 @@ class Brom:
         self.ser.flush()
         echo = self._read_exact(len(payload), timeout=1.0)
         if echo != payload:
-            raise RuntimeError(
-                f"command echo mismatch: sent {payload.hex()} got {echo.hex()}"
-            )
+            raise RuntimeError(f"command echo mismatch: sent {payload.hex()} got {echo.hex()}")
 
     def read32(self, address: int, length: int, *, byte_swap: bool = False) -> bytes:
         if address % 4 or length % 4:
@@ -81,8 +79,9 @@ class Brom:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("port")
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--base", type=lambda x: int(x, 0), default=0x20000000)
@@ -135,8 +134,7 @@ def main() -> int:
             cursor += take
             remaining -= take
             pct = int(len(out) * 100 / length)
-            sys.stdout.write(f"\r  {pct:3d}%  {len(out)}/{length}  "
-                             f"({time.time() - started:.1f}s)")
+            sys.stdout.write(f"\r  {pct:3d}%  {len(out)}/{length}  ({time.time() - started:.1f}s)")
             sys.stdout.flush()
         print()
     finally:

@@ -44,8 +44,9 @@ RUNTIME_FIELDS = (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("dump", type=Path)
     parser.add_argument("--normalize", type=Path, default=None)
     args = parser.parse_args()
@@ -82,8 +83,9 @@ def main() -> int:
                 label = f"  <- {what}"
                 in_runtime += 1
                 break
-        print(f"  0x{offset:05X}: dump=0x{ours[offset]:02X} official=0x{official[offset]:02X}"
-              f"{label}")
+        print(
+            f"  0x{offset:05X}: dump=0x{ours[offset]:02X} official=0x{official[offset]:02X}{label}"
+        )
 
     print(f"\n{in_runtime}/{count} differing bytes are inside documented runtime fields")
     if in_runtime != count:

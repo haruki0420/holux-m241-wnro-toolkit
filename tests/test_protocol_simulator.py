@@ -98,12 +98,19 @@ def test_every_command_byte_is_echoed() -> None:
     with _brom(device) as boot:
         boot.start()
         boot.ser.reset_input_buffer()
-        frame = bytes([brom.OPCODE_READ32]) + (0x20000000).to_bytes(4, "big") + (4).to_bytes(4, "big")
+        # READ32: the count field is in 32-bit dwords.
+        frame = (
+            bytes([brom.OPCODE_READ32])
+            + (0x00200000).to_bytes(4, "big")
+            + (1).to_bytes(4, "big")
+        )
         port = boot.ser
         for byte in frame:
             port.write(bytes([byte]))
             assert port.read(1) == bytes([byte])
-        assert port.read(4) == brom.swap_pairs(_image()[:4])
+        # READ32 ships each 32-bit word big-endian, so the wire form is the
+        # byte-reversed memory order.
+        assert port.read(4) == brom.reverse_words32(_image()[:4])
 
 
 def test_write_then_read_through_bootrom() -> None:

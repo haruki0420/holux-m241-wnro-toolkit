@@ -58,8 +58,7 @@ def sync(ser: serial.Serial, verbose: bool = True) -> bool:
         if value == expected or value == (expected ^ 0xFF):
             probe += 1
             if verbose:
-                print(f"    [ OK ] 0x{expected:02X} -> 0x{value:02X} "
-                      f"({probe}/4)")
+                print(f"    [ OK ] 0x{expected:02X} -> 0x{value:02X} ({probe}/4)")
             time.sleep(DELAYS_MS[probe - 1] / 1000.0)
         else:
             attempt += 1

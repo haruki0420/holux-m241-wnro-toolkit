@@ -67,8 +67,9 @@ def hexdump(data: bytes, base: int) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("port")
     parser.add_argument("--base", type=lambda x: int(x, 0), default=0x20000000)
     parser.add_argument("--words", type=int, default=32)

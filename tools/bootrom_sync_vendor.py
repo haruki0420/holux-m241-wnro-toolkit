@@ -56,14 +56,17 @@ def sync(ser: serial.Serial, verbose: bool = False) -> bool:
         value = reply[0]
         if value == expected or value == (expected ^ 0xFF):
             if verbose:
-                print(f"      [{attempt:>2}] probe 0x{expected:02X} -> "
-                      f"0x{value:02X} OK  ({probe + 1}/4)")
+                print(
+                    f"      [{attempt:>2}] probe 0x{expected:02X} -> "
+                    f"0x{value:02X} OK  ({probe + 1}/4)"
+                )
             probe += 1
             time.sleep(DELAYS_MS[probe - 1] / 1000.0)
         else:
             if verbose:
-                print(f"      [{attempt:>2}] probe 0x{expected:02X} -> "
-                      f"0x{value:02X} WRONG, restart")
+                print(
+                    f"      [{attempt:>2}] probe 0x{expected:02X} -> 0x{value:02X} WRONG, restart"
+                )
             probe = 0
             attempt += 1
     return probe >= len(PROBES)

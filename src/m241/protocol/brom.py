@@ -74,11 +74,25 @@ def swap_pairs(data: bytes) -> bytes:
     """Swap every 16-bit pair: ``ab cd`` -> ``ba dc`` (odd tail unchanged).
 
     Applying it twice is the identity, so the same helper converts wire order
-    to memory order and back.
+    to memory order and back.  This is the transformation for ``0xA1`` WRITE16
+    and ``0xA2`` READ16 payloads.
     """
     out = bytearray(data)
     for index in range(0, len(out) - 1, 2):
         out[index], out[index + 1] = out[index + 1], out[index]
+    return bytes(out)
+
+
+def reverse_words32(data: bytes) -> bytes:
+    """Reverse each 32-bit word: ``01 02 03 04`` -> ``04 03 02 01``.
+
+    Measured on hardware: ``0xAF`` READ32 returns the flash contents as big
+    endian 32-bit words, so memory order is the byte-reversed form of the wire.
+    A trailing partial word is left alone.
+    """
+    out = bytearray(data)
+    for index in range(0, len(out) - 3, 4):
+        out[index : index + 4] = out[index : index + 4][::-1]
     return bytes(out)
 
 
@@ -297,33 +311,49 @@ class MtkBootRom:
                     offset=offset,
                 )
 
-    def _frame(self, opcode: int, address: int, length: int) -> bytes:
+    def _frame(self, opcode: int, address: int, count: int) -> bytes:
+        """Build an ``opcode + BE32 address + BE32 count`` frame.
+
+        ``count`` is the unit the chip expects for that opcode: 32-bit dwords
+        for ``0xAF``, 16-bit words for ``0xA2``/``0xA1``/``0xA4``, and 0 for
+        ``0xA8``.  Measured on hardware -- sending a byte count instead is
+        rejected or returns the wrong amount of data.
+        """
         return (
             bytes([opcode])
             + (address & 0xFFFFFFFF).to_bytes(4, "big")
-            + (length & 0xFFFFFFFF).to_bytes(4, "big")
+            + (count & 0xFFFFFFFF).to_bytes(4, "big")
         )
 
     # -- commands ----------------------------------------------------------
 
     def _read(self, opcode: int, address: int, length: int, byte_swap: bool) -> bytes:
+        """Read ``length`` bytes; the count field is derived from the opcode.
+
+        ``0xAF`` (READ32) counts dwords and returns byte-reversed 32-bit words;
+        ``0xA2`` (READ16) counts words and returns 16-bit pair-swapped data.
+        Neither returns a checksum trailer -- the earlier implementation
+        consumed two extra bytes and lost frame sync.
+        """
         if length <= 0:
             return b""
-        self._send_echo(self._frame(opcode, address, length), "read header")
+        if opcode == OPCODE_READ32:
+            if address % 4 or length % 4:
+                raise BootRomError(
+                    f"READ32 needs a 4-byte aligned address and length "
+                    f"(got 0x{address:08X}, {length} bytes)"
+                )
+            count = length // 4
+        else:
+            if address % 2 or length % 2:
+                raise BootRomError(
+                    f"READ16 needs a 2-byte aligned address and length "
+                    f"(got 0x{address:08X}, {length} bytes)"
+                )
+            count = length // 2
+        self._send_echo(self._frame(opcode, address, count), "read header")
         raw = self.read_exact(length, what=f"{length} bytes at 0x{address:08X}")
-        reply = self.read_exact(2, what=f"read checksum for 0x{address:08X}")
-        # The wire always carries 16-bit pairs swapped relative to memory; the
-        # chip's XOR16 checksum is computed over the memory-order bytes.
-        memory_order = swap_pairs(raw)
-        expected = checksum_xor16(memory_order)
-        actual = int.from_bytes(reply, "big")
-        if actual != expected:
-            raise BootRomError(
-                f"read checksum mismatch at 0x{address:08X} (0x{length:X} bytes): "
-                f"expected 0x{expected:04X}, chip sent 0x{actual:04X}; "
-                "the chip may still be busy, retry the read",
-                offset=0,
-            )
+        memory_order = reverse_words32(raw) if opcode == OPCODE_READ32 else swap_pairs(raw)
         return memory_order if byte_swap else raw
 
     def read32(self, address: int, length: int, byte_swap: bool = False) -> bytes:
@@ -335,14 +365,26 @@ class MtkBootRom:
         return self._read(OPCODE_READ16, address, length, byte_swap)
 
     def read(self, address: int, length: int, byte_swap: bool = False) -> bytes:
-        """Generic read; identical to :meth:`read32`."""
-        return self.read32(address, length, byte_swap=byte_swap)
+        """Read through ``0xAF`` when 4-byte aligned, else fall back to ``0xA2``."""
+        if address % 4 == 0 and length % 4 == 0:
+            return self.read32(address, length, byte_swap=byte_swap)
+        return self.read16(address, length, byte_swap=byte_swap)
 
     def checksum(self, address: int, length: int) -> int:
-        """Ask the chip for the XOR-16 checksum of a region (opcode 0xA4)."""
+        """Ask the chip for the XOR-16 checksum of a region (opcode 0xA4).
+
+        Unlike the read commands this one *does* answer with two bytes.
+        """
         if length <= 0:
             return 0
-        self._send_echo(self._frame(OPCODE_CHECKSUM, address, length), "checksum header")
+        if address % 2 or length % 2:
+            raise BootRomError(
+                f"CHECKSUM needs a 2-byte aligned address and length "
+                f"(got 0x{address:08X}, {length} bytes)"
+            )
+        self._send_echo(
+            self._frame(OPCODE_CHECKSUM, address, length // 2), "checksum header"
+        )
         reply = self.read_exact(2, what=f"checksum reply for 0x{address:08X}")
         return int.from_bytes(reply, "big")
 
@@ -362,10 +404,14 @@ class MtkBootRom:
     ) -> None:
         """Write ``data`` with the 16-bit BootROM write command (opcode 0xA1).
 
-        The frame (opcode/address/count) is sent once, then the whole payload as
-        ten byte chunks; every byte is echoed.  With ``byte_swap=True`` the data
-        stream is byte-swapped in 16-bit pairs on the wire (the chip stores
-        little-endian, so pass the bytes as they should end up in memory).
+        The frame carries the count in **16-bit words**.  The payload is then
+        streamed in ten byte chunks, each echoed by the chip.  With
+        ``byte_swap=True`` the payload is pair-swapped on the wire (the chip
+        stores little-endian, so pass bytes as they should appear in memory).
+
+        The header and the payload are written in a single burst: feeding them
+        byte at a time with a flush desynchronises the echo stream on real
+        hardware.
 
         Unless ``skip_cksum`` is set the chip's checksum of the written region
         is compared with the checksum of the bytes that were stored; RAM writes
@@ -374,21 +420,28 @@ class MtkBootRom:
         payload = bytes(data)
         if not payload:
             return
+        if len(payload) % 2:
+            raise BootRomError(f"WRITE16 needs an even length, got {len(payload)}")
+        if address % 2:
+            raise BootRomError(f"WRITE16 needs a 2-byte aligned address, got 0x{address:08X}")
         wire = swap_pairs(payload) if byte_swap else payload
-        self._send_echo(
-            self._frame(OPCODE_WRITE16, address, len(payload)), "write16 header"
-        )
+        header = self._frame(OPCODE_WRITE16, address, len(payload) // 2)
+
         serial_port = self._ensure_open()
         done = 0
         for offset in range(0, len(wire), WRITE_CHUNK):
             chunk = wire[offset : offset + WRITE_CHUNK]
-            serial_port.write(chunk)
-            echoed = self.read_exact(len(chunk), what=f"write16 echo at 0x{address + offset:08X}")
-            if verify_echo and echoed != chunk:
+            block = header + chunk if offset == 0 else chunk
+            serial_port.write(block)
+            serial_port.flush()
+            echoed = self.read_exact(
+                len(block), what=f"write16 echo at 0x{address + offset:08X}"
+            )
+            if verify_echo and echoed != block:
                 raise BootRomError(
                     f"BootROM echo mismatch while writing at 0x{address + offset:08X}: "
-                    f"sent {chunk.hex()}, chip echoed {echoed.hex()}",
-                    offset=offset,
+                    f"sent {block.hex()}, chip echoed {echoed.hex()}",
+                    offset=offset + (len(header) if offset == 0 else 0),
                 )
             done += len(chunk)
             if progress_cb is not None:
@@ -408,10 +461,9 @@ def _decode_firmware_size(raw_header: bytes) -> int:
     """Decode the size field at ``base + 0xF4``.
 
     The image stores the value little-endian (see
-    ``docs/04-firmware-profiles.md``), while the frozen contract names it
-    big-endian, so both orders are accepted and the smaller plausible value
-    wins: byte-reversing a realistic firmware size always yields a larger
-    number.
+    ``docs/04-firmware-profiles.md``).  ``0xAF`` READ32 returns byte-reversed
+    32-bit words, so callers pass the already-corrected bytes; this helper just
+    accepts either endianness and keeps the plausible value.
     """
     big_endian = int.from_bytes(raw_header, "big")
     little_endian = int.from_bytes(raw_header, "little")
@@ -438,13 +490,16 @@ def dump_firmware(
     byte_swap: bool = True,
     progress_cb: ProgressCallback | None = None,
 ) -> bytes:
-    """Dump ``length`` (or header-derived) bytes from the firmware base address."""
+    """Dump ``length`` (or header-derived) bytes from the firmware base address.
+
+    ``byte_swap=True`` (the default) returns memory-order bytes: the 32-bit
+    words the chip sends back are byte-reversed.
+    """
     if length is None:
         raw_header = brom.read32(
             base_addr + FIRMWARE_SIZE_OFFSET, 4, byte_swap=byte_swap
         )
-        header = raw_header if byte_swap else swap_pairs(raw_header)
-        length = _decode_firmware_size(header)
+        length = _decode_firmware_size(raw_header)
     if length < 0:
         raise FirmwareError(f"invalid dump length {length}", offset=0)
     if length == 0:
@@ -452,6 +507,10 @@ def dump_firmware(
     buffer = bytearray()
     while len(buffer) < length:
         chunk_len = min(DUMP_CHUNK, length - len(buffer))
+        if chunk_len % 4:
+            chunk_len -= chunk_len % 4
+            if chunk_len == 0:
+                chunk_len = 4
         chunk = brom.read32(base_addr + len(buffer), chunk_len, byte_swap=byte_swap)
         if len(chunk) != chunk_len:
             raise BootRomError(
@@ -462,15 +521,17 @@ def dump_firmware(
         buffer += chunk
         if progress_cb is not None:
             progress_cb(len(buffer), length)
-    return bytes(buffer)
+    return bytes(buffer[:length])
 
 
 __all__ = [
     "BASE_ADDR_DA",
     "BASE_ADDR_FIRMWARE",
     "BASE_ADDR_FIRMWARE_M3318",
+    "BASE_ADDR_FIRMWARE_MT333X",
     "BOOT_REPLY",
     "BOOT_SYNC",
+    "DEFAULT_NMEA_BAUD",
     "DUMP_CHUNK",
     "FIRMWARE_SIZE_OFFSET",
     "MAX_FIRMWARE_SIZE",
@@ -480,9 +541,11 @@ __all__ = [
     "OPCODE_READ16",
     "OPCODE_READ32",
     "OPCODE_WRITE16",
+    "PMTK180_COMMAND",
     "MtkBootRom",
     "WRITE_CHUNK",
     "checksum_xor16",
     "dump_firmware",
+    "reverse_words32",
     "swap_pairs",
 ]

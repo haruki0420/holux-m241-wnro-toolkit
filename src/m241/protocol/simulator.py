@@ -233,18 +233,25 @@ class FakeDevice:
     def _dispatch_frame(self, frame: bytes) -> None:
         opcode = frame[0]
         address = int.from_bytes(frame[1:5], "big")
-        length = int.from_bytes(frame[5:9], "big")
+        count = int.from_bytes(frame[5:9], "big")
         if opcode in (OPCODE_READ32, OPCODE_READ16):
-            data = self._read(address, length)
-            self.emit(swap_pairs(data))
-            self.emit(checksum_xor16(data).to_bytes(2, "big"))
+            # The count field is in dwords for 0xAF and in words for 0xA2.
+            unit = 4 if opcode == OPCODE_READ32 else 2
+            data = self._read(address, count * unit)
+            if opcode == OPCODE_READ32:
+                # READ32 sends each 32-bit word big-endian on the wire.
+                self.emit(b"".join(data[i : i + 4][::-1] for i in range(0, len(data), 4)))
+            else:
+                self.emit(swap_pairs(data))
         elif opcode == OPCODE_CHECKSUM:
-            self.emit(checksum_xor16(self._read(address, length)).to_bytes(2, "big"))
+            # CHECKSUM counts words.
+            self.emit(checksum_xor16(self._read(address, count * 2)).to_bytes(2, "big"))
         elif opcode == OPCODE_WRITE16:
-            if length == 0:
+            # WRITE16 counts words, not bytes.
+            if count == 0:
                 return
             self._write_addr = address
-            self._write_count = length
+            self._write_count = count * 2
             self._write_data.clear()
             self._write_done = 0
             self._stage = "write"

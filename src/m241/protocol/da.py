@@ -25,6 +25,7 @@ Protocol (verified against the vendor utility and the DA v3.8.4 blob):
 
 from __future__ import annotations
 
+import contextlib
 import struct
 import time
 from pathlib import Path
@@ -46,6 +47,15 @@ SYNC = 0xC0
 
 WRITE_PACKET_LEN = 0x100
 EXPECTED_DA_VERSION = 0x0308
+
+#: Delay inserted between the 0xD3 fields.  The vendor tool sends the header,
+#: the begin address and the end address as separate writes with a short pause,
+#: then waits for a single ACK.
+BLOCK_FIELD_DELAY = 0.02
+
+#: How long to wait for the 0xD3 acknowledgement.  Setting the range erases the
+#: sectors the new data will occupy, so this must cover a full block erase.
+DEFAULT_ERASE_TIMEOUT = 30.0
 
 #: The 20 byte DA info report, packed big-endian.
 DA_INFO_FORMAT = ">BHBLHHHHL"
@@ -85,8 +95,9 @@ class DownloadAgent:
     WRITE_PACKET_LEN = WRITE_PACKET_LEN
     EXPECTED_DA_VERSION = EXPECTED_DA_VERSION
 
-    def __init__(self, brom: MtkBootRom) -> None:
+    def __init__(self, brom: MtkBootRom, *, erase_timeout: float = DEFAULT_ERASE_TIMEOUT) -> None:
         self.brom = brom
+        self.erase_timeout = float(erase_timeout)
         self._info: dict[str, int] = {}
         self._progress_cb: ProgressCallback | None = None
         self._loaded = False
@@ -227,7 +238,23 @@ class DownloadAgent:
         return self._parse_info(report)
 
     def write_firmware(self, fw: bytes, *, start: int = 0) -> None:
-        """Write ``fw`` to the DA mapped flash, starting at ``start``."""
+        """Write ``fw`` to the DA mapped flash, starting at ``start``.
+
+        Frame layout, cross-checked against three sources (the write-up, the
+        upstream implementation and the vendor DLL's own command strings):
+
+            0xD3  [count=1]  [begin BE32]  [end BE32]   -> one ACK
+            0xD5  [packet_len BE32]                     -> two ACKs
+            per packet: data(0x100) + sum16 BE16        -> 0x69 CONT
+            end of data                                 -> two ACKs
+
+        The vendor tool writes the 0xD3 header and the two addresses as
+        separate writes with a short sleep between them and then waits for a
+        single ACK.  It also allows ~100 ms per block plus the flash erase time,
+        so the ACK timeout here is deliberately generous: waiting too briefly
+        is exactly the failure the upstream project hit (it saw the echo but
+        never the ACK).
+        """
         data = bytes(fw)
         if not data:
             raise FirmwareError("refusing to write an empty firmware image", offset=start)
@@ -235,17 +262,10 @@ class DownloadAgent:
             raise DownloadAgentError(
                 "download agent is not loaded; call start() before write_firmware()"
             )
-        end = start + len(data) - 1
-        try:
-            self._send(struct.pack(">BBLL", OPCODE_MEM_CMD, 1, start, end))
-            self._await_ack("the memory-range command (0xD3)")
-            self._send(struct.pack(">BL", OPCODE_WRITE, WRITE_PACKET_LEN))
-            self._await_ack("the write command (0xD5), first acknowledgement")
-            self._await_ack("the write command (0xD5), second acknowledgement")
-        except DownloadAgentError:
-            raise
-        except Exception as exc:
-            raise DownloadAgentError(f"download agent refused the write setup: {exc}") from exc
+        if len(data) % 2:
+            raise FirmwareError("firmware length must be a multiple of 2", offset=start)
+
+        self._begin_write(start, len(data))
 
         total = len(data)
         for offset in range(0, total, WRITE_PACKET_LEN):
@@ -253,7 +273,10 @@ class DownloadAgent:
             self._send(packet)
             self._send(struct.pack(">H", _sum16(packet)))
             try:
-                self._expect(CONT, f"packet {offset // WRITE_PACKET_LEN} (0x{start + offset:08X})")
+                self._expect(
+                    CONT,
+                    f"packet {offset // WRITE_PACKET_LEN} (0x{start + offset:08X})",
+                )
             except DownloadAgentError as exc:
                 raise DownloadAgentError(
                     f"download agent rejected the packet at 0x{start + offset:08X}: {exc}",
@@ -264,6 +287,79 @@ class DownloadAgent:
 
         self._await_ack("the final write acknowledgement, first")
         self._await_ack("the final write acknowledgement, second")
+
+    def _begin_write(self, start: int, length: int) -> None:
+        """Send the 0xD3 range command as the vendor tool does.
+
+        Split into header / begin-address / end-address writes.  The byte
+        stream is identical to a single 10-byte write, but real hardware is
+        happier when the fields arrive separately, and the ACK that follows
+        means "the range is set and the affected sectors are erased".
+        """
+        end = start + length - 1
+        serial_port = self._require_serial()
+        try:
+            # header: opcode + block count
+            self._send(struct.pack(">BB", OPCODE_MEM_CMD, 1))
+            serial_port.flush()
+            time.sleep(BLOCK_FIELD_DELAY)
+            # begin address, then end address (both big-endian)
+            self._send(struct.pack(">L", start))
+            serial_port.flush()
+            time.sleep(BLOCK_FIELD_DELAY)
+            self._send(struct.pack(">L", end))
+            serial_port.flush()
+        except Exception as exc:
+            raise DownloadAgentError(
+                f"could not send the memory-range command (0xD3): {exc}"
+            ) from exc
+        self._await_ack_slow("the memory-range command (0xD3)")
+
+        try:
+            self._send(struct.pack(">BL", OPCODE_WRITE, WRITE_PACKET_LEN))
+            serial_port.flush()
+            self._await_ack("the write command (0xD5), first acknowledgement")
+            self._await_ack("the write command (0xD5), second acknowledgement")
+        except DownloadAgentError:
+            raise
+        except Exception as exc:
+            raise DownloadAgentError(
+                f"download agent refused the write setup (0xD5): {exc}"
+            ) from exc
+
+    def _await_ack_slow(self, what: str) -> None:
+        """Wait for a single ACK, allowing for flash erase time.
+
+        Reading the range command's ACK too early is the failure the upstream
+        project documented (echo seen, ACK never).  ``erase_timeout`` is
+        intentionally large because setting the range erases the sectors the
+        new data will occupy.
+        """
+        serial_port = self._require_serial()
+        previous = getattr(serial_port, "timeout", None)
+        deadline = time.monotonic() + self.erase_timeout
+        try:
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                serial_port.timeout = 0.25
+            while time.monotonic() < deadline:
+                raw = serial_port.read(1)
+                if not raw:
+                    continue
+                reply = raw[0]
+                if reply == NAK:
+                    raise DownloadAgentError(
+                        f"the download agent rejected {what} (NAK 0xA5)"
+                    )
+                if reply == ACK:
+                    return
+                # Anything else is stale traffic; keep waiting.
+        finally:
+            if previous is not None:
+                with contextlib.suppress(AttributeError, OSError, ValueError):
+                    serial_port.timeout = previous
+        raise DownloadAgentError(
+            f"timeout after {self.erase_timeout:.0f}s waiting for the ACK of {what}"
+        )
 
     def restart(self) -> None:
         """Send the DA restart command (0xD9)."""

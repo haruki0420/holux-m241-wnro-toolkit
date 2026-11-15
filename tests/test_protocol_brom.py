@@ -85,7 +85,7 @@ def test_start_is_idempotent() -> None:
     try:
         boot.start()
         boot.start()
-        assert boot.read32(0x20000000, 4, byte_swap=True) == _image()[:4]
+        assert boot.read32(0x00200000, 4, byte_swap=True) == _image()[:4]
     finally:
         boot.close()
 
@@ -130,7 +130,7 @@ def test_using_a_closed_bootrom_is_an_error() -> None:
     boot = _brom(device)
     boot.close()
     with pytest.raises(BootRomError, match="closed"):
-        boot.read32(0x20000000, 4)
+        boot.read32(0x00200000, 4)
 
 
 def test_constructing_a_bootrom_does_not_open_the_port() -> None:
@@ -189,7 +189,7 @@ def test_read32_and_read16_roundtrip_with_byte_swap() -> None:
     device = FakeDevice(image)
     with _brom(device) as boot:
         boot.start()
-        assert boot.read32(0x20000000, 0x20, byte_swap=True) == image[:0x20]
+        assert boot.read32(0x00200000, 0x20, byte_swap=True) == image[:0x20]
         assert boot.read16(0x20000010, 0x20, byte_swap=True) == image[0x10:0x30]
         assert boot.read(0x20000020, 0x10, byte_swap=True) == image[0x20:0x30]
 
@@ -199,16 +199,18 @@ def test_read_without_byte_swap_returns_wire_order() -> None:
     device = FakeDevice(image)
     with _brom(device) as boot:
         boot.start()
-        wire = boot.read32(0x20000000, 8, byte_swap=False)
-        assert wire == brom.swap_pairs(image[:8])
-        assert brom.swap_pairs(wire) == image[:8]
+        # READ32 sends each 32-bit word big-endian, so memory order is the
+        # byte-reversed form of the wire.
+        wire = boot.read32(0x00200000, 8, byte_swap=False)
+        assert wire == brom.reverse_words32(image[:8])
+        assert brom.reverse_words32(wire) == image[:8]
 
 
 def test_read_zero_length_is_empty_and_sends_nothing() -> None:
     device = FakeDevice()
     with _brom(device) as boot:
         boot.start()
-        assert boot.read32(0x20000000, 0) == b""
+        assert boot.read32(0x00200000, 0) == b""
         assert device.in_waiting == 0
 
 
@@ -218,7 +220,7 @@ def test_read_timeout_raises_bootrom_error() -> None:
         boot.start()
         device.silent = True
         with pytest.raises(BootRomError, match="timeout"):
-            boot.read32(0x20000000, 8)
+            boot.read32(0x00200000, 8)
 
 
 def test_read_echo_mismatch_is_reported_with_offset() -> None:
@@ -231,35 +233,23 @@ def test_read_echo_mismatch_is_reported_with_offset() -> None:
         device._output.clear()  # noqa: SLF001 - test double
         device.emit(b"\x00")
         with pytest.raises(BootRomError) as excinfo:
-            boot.read32(0x20000000, 4)
+            boot.read32(0x00200000, 4)
         assert excinfo.value.offset == 0
 
 
-def test_read_checksum_mismatch_raises() -> None:
-    class LyingReadChecksumDevice(FakeDevice):
-        def _dispatch_frame(self, frame: bytes) -> None:
-            if frame[0] in (brom.OPCODE_READ32, brom.OPCODE_READ16):
-                address = int.from_bytes(frame[1:5], "big")
-                length = int.from_bytes(frame[5:9], "big")
-                self.emit(brom.swap_pairs(self._read(address, length)))
-                self.emit(b"\xDE\xAD")  # wrong XOR16
-                return
-            super()._dispatch_frame(frame)
+def test_read_has_no_trailing_checksum_word() -> None:
+    """``0xAF``/``0xA2`` return data only; the checksum is a separate command.
 
-    device = LyingReadChecksumDevice()
-    with _brom(device) as boot:
-        boot.start()
-        with pytest.raises(BootRomError, match="read checksum mismatch"):
-            boot.read32(0x20000000, 8)
-
-
-def test_read_checksum_is_verified_not_just_consumed() -> None:
-    """The trailing checksum word must actually be validated."""
+    Consuming a trailer desynchronises the frame on real hardware, which is
+    exactly what the earlier implementation did.  A correct read must leave the
+    device's output buffer empty.
+    """
     device = FakeDevice(_image(0x100))
     with _brom(device) as boot:
         boot.start()
-        # A correct read consumes data + 2 checksum bytes and leaves nothing.
-        assert boot.read32(0x20000000, 0x10, byte_swap=True) == _image(0x100)[:0x10]
+        assert boot.read32(0x00200000, 0x10, byte_swap=True) == _image(0x100)[:0x10]
+        assert device.in_waiting == 0
+        assert boot.read16(0x00200010, 0x10, byte_swap=True) == _image(0x100)[0x10:0x20]
         assert device.in_waiting == 0
 
 
@@ -271,8 +261,8 @@ def test_checksum_matches_helper() -> None:
     device = FakeDevice(image)
     with _brom(device) as boot:
         boot.start()
-        assert boot.checksum(0x20000000, 0x100) == brom.checksum_xor16(image)
-        assert boot.checksum(0x20000000, 0) == 0
+        assert boot.checksum(0x00200000, 0x100) == brom.checksum_xor16(image)
+        assert boot.checksum(0x00200000, 0) == 0
 
 
 # -- write16 ----------------------------------------------------------------
