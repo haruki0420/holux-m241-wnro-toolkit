@@ -898,14 +898,15 @@ class TestNmeaProxy:
     ) -> None:
         import socket
 
+        # 0.0.0.0 is bindable on every OS; 127.0.0.2 is not (macOS rejects it).
         with socket.socket() as probe:
-            probe.bind(("127.0.0.2", 0))
+            probe.bind(("0.0.0.0", 0))
             port = probe.getsockname()[1]
         monkeypatch.setattr(
             cli, "_SERIAL_FACTORY", lambda _port, _baud: FakeNmeaSerial(b"")
         )
         assert cli.main(
-            ["nmea", "proxy", "FAKE", "--tcp", f"127.0.0.2:{port}", "--duration", "0.3"]
+            ["nmea", "proxy", "FAKE", "--tcp", f"0.0.0.0:{port}", "--duration", "0.3"]
         ) == 0
         assert "no authentication" in capsys.readouterr().err
 
