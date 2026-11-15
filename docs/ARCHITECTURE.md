@@ -1,4 +1,4 @@
-# Architecture & module contract
+﻿# Architecture & module contract
 
 This document is the **frozen interface contract** between the parallel work
 streams of this project. Every owner builds against these signatures; the
@@ -17,7 +17,7 @@ Hard platform rules (all streams):
   the port open). `pyserial` is a hard dependency of `m241.protocol` only.
 - File paths are `pathlib.Path`; every CLI output path is created with
   parents.
-- All user-visible text is English; Japanese lives in `README.ja.md` and
+- All user-visible text is English; Japanese lives in `README.md` and
   `docs/ja/`. Log messages go to `stderr`, machine output to `stdout`.
 - No proprietary binary may be committed. Tests must synthesise their own
   fixtures.

@@ -7,7 +7,8 @@ Read in this order if you are new:
 
 | # | Document | What it answers |
 |---|---|---|
-| — | [`../README.md`](../README.md) | what the project is, install, quick start |
+| — | [`../README.md`](../README.md) | 日本語のメイン README（何ができるか・使い方） |
+| — | [`../README.en.md`](../README.en.md) | English README (what it does, how to use it) |
 | 00 | [`00-background.md`](00-background.md) | **why** the M-241 reports 2006, and what the 4-byte patch does |
 | 01 | [`01-protocol.md`](01-protocol.md) | the MTK BootROM + Download Agent protocol we implement |
 | 02 | [`02-log-format.md`](02-log-format.md) | the binary track-log format, and why V1.13 stores fewer points |

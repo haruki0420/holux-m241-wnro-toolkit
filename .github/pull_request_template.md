@@ -1,4 +1,4 @@
-# Pull request
+﻿# Pull request
 
 ## What this changes
 
@@ -47,7 +47,7 @@ Output:
 - [ ] `docs/ARCHITECTURE.md` updated (public API changed)
 - [ ] `docs/07-cli-spec.md` + `tests/test_cli.py` updated (CLI changed)
 - [ ] `CHANGELOG.md` updated under "Unreleased"
-- [ ] `README.md` / `README.ja.md` updated if the user-facing workflow changed
+- [ ] `README.md`（日本語） / `README.en.md`（English） updated if the user-facing workflow changed
 
 ## Notes for reviewers
 
