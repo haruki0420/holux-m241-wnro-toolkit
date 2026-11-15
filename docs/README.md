@@ -16,7 +16,8 @@ Read in this order if you are new:
 | 05 | [`05-vendor-drop.md`](05-vendor-drop.md) | what is in the official Holux packages and what we use |
 | 06 | [`06-troubleshooting.md`](06-troubleshooting.md) | symptom → cause → fix |
 | 07 | [`07-cli-spec.md`](07-cli-spec.md) | the authoritative CLI contract (exit codes, JSON, prompts) |
-| 08 | [`08-quick-card.md`](08-quick-card.md) | one-page cheat sheet to print
+| 08 | [`08-quick-card.md`](08-quick-card.md) | one-page cheat sheet to print |
+| 09 | [`09-verification.md`](09-verification.md) | how each claim in this repo was checked (and what was not) |
 
 Reference material for contributors:
 
