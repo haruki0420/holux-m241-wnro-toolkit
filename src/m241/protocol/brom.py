@@ -211,6 +211,11 @@ class MtkBootRom:
         sentence (no arguments) and only at the NMEA baud rate.  Sending
         ``$PMTK180,<baud>`` -- as an earlier version of this function did -- is
         silently ignored.
+
+        The sentence is only honoured while the chip is still streaming NMEA,
+        so this waits for the stream to go quiet afterwards and reports failure
+        when it does not: a later sync attempt against a chip that never
+        switched can only time out.
         """
         previous = getattr(serial_port, "baudrate", self.baud)
         probe_baud = self.nmea_baud or DEFAULT_NMEA_BAUD
@@ -218,18 +223,50 @@ class MtkBootRom:
             with contextlib.suppress(AttributeError, OSError, ValueError):
                 serial_port.baudrate = probe_baud
                 time.sleep(0.05)
+
+        heard = b""
         with contextlib.suppress(AttributeError, OSError, ValueError):
+            serial_port.reset_input_buffer()
+            heard = self._drain_for(serial_port, 0.35)
             serial_port.reset_input_buffer()
             serial_port.write(PMTK180_COMMAND)
             flush = getattr(serial_port, "flush", None)
             if flush is not None:
                 flush()
-            time.sleep(0.15)
+            time.sleep(0.2)
+        trailing = b""
+        with contextlib.suppress(AttributeError, OSError, ValueError):
+            trailing = self._drain_for(serial_port, 0.5)
+
+        if not heard:
+            raise BootRomError(
+                "no NMEA stream before $PMTK180: the logger is not in normal "
+                "mode (already in BootROM, switched off, or needs a power cycle)"
+            )
+        if trailing:
+            raise BootRomError(
+                f"the logger kept streaming NMEA after $PMTK180 "
+                f"({len(trailing)} bytes); the switch did not take effect"
+            )
+
         # The chip is listening now; continue at the BootROM baud.
         if hasattr(serial_port, "baudrate"):
             with contextlib.suppress(AttributeError, OSError, ValueError):
                 serial_port.baudrate = previous
                 time.sleep(0.05)
+
+    def _drain_for(self, serial_port: Any, seconds: float) -> bytes:
+        """Read whatever arrives within *seconds*; never raises."""
+        deadline = time.monotonic() + seconds
+        buffer = bytearray()
+        while time.monotonic() < deadline:
+            chunk = serial_port.read(4096)
+            if chunk:
+                buffer += chunk
+                deadline = time.monotonic() + 0.15
+            else:
+                time.sleep(_POLL)
+        return bytes(buffer)
 
     def _discard_input(self, serial_port: Any) -> None:
         with contextlib.suppress(AttributeError, OSError):
