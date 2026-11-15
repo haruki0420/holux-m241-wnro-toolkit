@@ -19,7 +19,13 @@ DA_BLOB = bytes((index * 31 + 7) & 0xFF for index in range(0x1000))
 
 
 def _boot(device: FakeDevice) -> brom.MtkBootRom:
-    return brom.MtkBootRom("FAKE", serial_factory=device.factory, timeout=0.2, sync_timeout=0.5)
+    return brom.MtkBootRom(
+        "FAKE",
+        serial_factory=device.factory,
+        timeout=0.2,
+        sync_timeout=0.5,
+        nmea_probe_seconds=0.0,
+    )
 
 
 def _started_da(device: FakeDevice, tmp_path: object) -> tuple[brom.MtkBootRom, da.DownloadAgent]:

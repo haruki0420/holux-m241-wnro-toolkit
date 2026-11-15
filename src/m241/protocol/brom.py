@@ -129,6 +129,7 @@ class MtkBootRom:
         serial_factory: Callable[[str, int], Any] | None = None,
         timeout: float = 1.0,
         sync_timeout: float = 5.0,
+        nmea_probe_seconds: float = 0.6,
     ) -> None:
         self.port = port
         self.baud = baud
@@ -136,6 +137,10 @@ class MtkBootRom:
         self.serial_factory = serial_factory
         self.timeout = float(timeout)
         self.sync_timeout = float(sync_timeout)
+        #: How long :meth:`probe_nmea` listens before deciding the port is
+        #: silent. One NMEA sentence per second, so this must exceed 1 s on
+        #: hardware; tests shorten it.
+        self.nmea_probe_seconds = float(nmea_probe_seconds)
         self.ser: Any = None
         self._closed = False
 
@@ -189,6 +194,22 @@ class MtkBootRom:
         if pmtk180:
             self._send_pmtk180(serial_port)
         if use_rts_dtr:
+            # Never pulse the reset lines at a firmware that is still streaming:
+            # that leaves the unit unresponsive until the battery is removed.
+            # The probe is tri-state and the uncertain answer refuses.
+            running = self.probe_nmea(serial_port, seconds=self.nmea_probe_seconds)
+            if running is True:
+                raise BootRomError(
+                    "the firmware is streaming NMEA, so the reset lines must not "
+                    "be pulsed (that leaves the unit unresponsive). Use "
+                    "'--pmtk180' to switch it into BootROM mode instead."
+                )
+            if running is None:
+                raise BootRomError(
+                    "cannot tell whether the firmware is running, so the reset "
+                    "lines will not be pulsed. Use '--pmtk180' to switch it into "
+                    "BootROM mode, or '--assume-brom' if it is already silent."
+                )
             self._assert_lines(serial_port)
         self._discard_input(serial_port)
         self._sync(serial_port)
@@ -255,17 +276,81 @@ class MtkBootRom:
                 serial_port.baudrate = previous
                 time.sleep(0.05)
 
+    def probe_nmea(self, serial_port: Any, *, seconds: float = 0.6) -> bool | None:
+        """Is the firmware streaming NMEA right now?
+
+        Returns ``True`` when NMEA sentences were heard, ``False`` when the
+        port stayed silent for the whole window, and ``None`` when the answer
+        cannot be established (the port could not be read, or bytes arrived
+        that are neither NMEA nor a clean silence).
+
+        Pulsing DTR/RTS at a *running* firmware leaves the unit unresponsive
+        until the battery is removed, so the reset route must not be taken on a
+        ``True`` or a ``None`` answer.  This is the check that
+        :meth:`start` relies on; it is deliberately conservative.
+        """
+        previous_baud = getattr(serial_port, "baudrate", None)
+        previous_timeout = getattr(serial_port, "timeout", None)
+        probe_baud = self.nmea_baud or DEFAULT_NMEA_BAUD
+        if seconds <= 0:
+            # A zero window means "do not probe" (simulators and tests); skip
+            # the baud switch so it costs nothing.
+            return False
+        heard = b""
+        try:
+            if hasattr(serial_port, "baudrate"):
+                with contextlib.suppress(AttributeError, OSError, ValueError):
+                    serial_port.baudrate = probe_baud
+                    time.sleep(0.05)
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                serial_port.reset_input_buffer()
+            heard = self._drain_for(serial_port, seconds)
+        except (AttributeError, OSError, ValueError):
+            return None
+        finally:
+            if previous_timeout is not None:
+                with contextlib.suppress(AttributeError, OSError, ValueError):
+                    serial_port.timeout = previous_timeout
+            if previous_baud is not None:
+                with contextlib.suppress(AttributeError, OSError, ValueError):
+                    serial_port.baudrate = previous_baud
+                    time.sleep(0.05)
+
+        if not heard:
+            return False
+        # NMEA is ASCII and every sentence starts with '$' and ends with a
+        # checksum. Anything else means we cannot tell what the port is doing.
+        if b"$" in heard and (b"\n" in heard or b"\r" in heard):
+            return True
+        return None
+
     def _drain_for(self, serial_port: Any, seconds: float) -> bytes:
-        """Read whatever arrives within *seconds*; never raises."""
+        """Read whatever arrives within *seconds*; never raises.
+
+        The deadline is **fixed**: it is not pushed forward when data arrives.
+        Re-arming it made this loop unable to exit while a stream was flowing,
+        and it is called precisely when NMEA may still be streaming.
+
+        ``read(4096)`` blocks for the port timeout even when a single byte is
+        queued, so the timeout is temporarily shortened while draining and
+        restored afterwards; otherwise a 0.35 s budget costs a full second.
+        """
+        previous = getattr(serial_port, "timeout", None)
         deadline = time.monotonic() + seconds
         buffer = bytearray()
-        while time.monotonic() < deadline:
-            chunk = serial_port.read(4096)
-            if chunk:
-                buffer += chunk
-                deadline = time.monotonic() + 0.15
-            else:
-                time.sleep(_POLL)
+        try:
+            with contextlib.suppress(AttributeError, OSError, ValueError):
+                serial_port.timeout = min(0.05, seconds)
+            while time.monotonic() < deadline:
+                chunk = serial_port.read(4096)
+                if chunk:
+                    buffer += chunk
+                else:
+                    time.sleep(_POLL)
+        finally:
+            if previous is not None:
+                with contextlib.suppress(AttributeError, OSError, ValueError):
+                    serial_port.timeout = previous
         return bytes(buffer)
 
     def _discard_input(self, serial_port: Any) -> None:

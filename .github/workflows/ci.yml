@@ -17,6 +17,7 @@ jobs:
   lint:
     name: lint + docs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,16 +43,21 @@ jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         # The package is pure Python, so testing every OS x version combination
-        # adds minutes without adding coverage. Cover the oldest and newest
-        # supported interpreters on Linux, plus one representative version on
-        # each other OS.
+        # adds minutes without adding coverage. Linux covers the oldest and
+        # newest supported interpreters (plus 3.11, which is still in the
+        # classifier list); Windows and macOS each get one representative
+        # version, because those are the platforms where the serial layer and
+        # path handling actually differ.
         include:
           - os: ubuntu-latest
             python: "3.10"
+          - os: ubuntu-latest
+            python: "3.11"
           - os: ubuntu-latest
             python: "3.13"
           - os: windows-latest
@@ -72,9 +78,10 @@ jobs:
   build:
     name: build (sdist + wheel, assert package data)
     runs-on: ubuntu-latest
-    # Packaging does not depend on test results; waiting for the matrix only
-    # delays the feedback.
-    needs: [lint]
+    timeout-minutes: 15
+    # Packaging must not go green while the tests are red: the artifact CI
+    # builds is the one a release promotes.
+    needs: [lint, test]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

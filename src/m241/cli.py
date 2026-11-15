@@ -296,6 +296,9 @@ def _bootrom(
         serial_factory=factory,
         timeout=timeout,
         sync_timeout=max(float(timeout), _SYNC_TIMEOUT),
+        # An injected factory means a simulator or a test double: there is no
+        # firmware to stream NMEA, so do not spend the probe window.
+        nmea_probe_seconds=0.0 if factory is not None else 0.6,
     )
 
 
@@ -575,7 +578,9 @@ def _simulated_da_info() -> dict[str, Any]:
     from m241.protocol.simulator import FakeDevice
 
     device = FakeDevice(bytes(0x1000))
-    boot = MtkBootRom("SIM", serial_factory=device.factory, timeout=1.0)
+    boot = MtkBootRom(
+        "SIM", serial_factory=device.factory, timeout=1.0, nmea_probe_seconds=0.0
+    )
     try:
         boot.start()
         agent = DownloadAgent(boot)
@@ -2180,7 +2185,9 @@ def _stage_firmware_roundtrip() -> str:
 
     firmware = _synthetic_firmware()
     device = FakeDevice(firmware)
-    boot = MtkBootRom("SIM", serial_factory=device.factory, timeout=1.0)
+    boot = MtkBootRom(
+        "SIM", serial_factory=device.factory, timeout=1.0, nmea_probe_seconds=0.0
+    )
     try:
         boot.start()
         dumped = dump_firmware(boot, length=len(firmware), byte_swap=True)
@@ -2233,7 +2240,9 @@ def _stage_flash_roundtrip() -> str:
     patched = apply_patch_plan(image, build_patch_plan(image))
     expected = patched.to_bytes()
     device = FakeDevice(stock)
-    boot = MtkBootRom("SIM", serial_factory=device.factory, timeout=1.0)
+    boot = MtkBootRom(
+        "SIM", serial_factory=device.factory, timeout=1.0, nmea_probe_seconds=0.0
+    )
     try:
         boot.start()
         agent = DownloadAgent(boot)
@@ -2489,8 +2498,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json_option(p)
     p.add_argument("port", nargs="?", default="auto", help="serial port (default: auto)")
     p.add_argument("-o", "--output", required=True, metavar="FILE", help="output image")
-    p.add_argument("--base-addr", type=_parse_int, default=0x20000000, metavar="ADDR",
-                   help="firmware base address (default 0x20000000; 0x0 for the M3318 view)")
+    p.add_argument("--base-addr", type=_parse_int, default=0x00200000, metavar="ADDR",
+                   help="firmware base address (default 0x00200000, measured on hardware; "
+                        "0x20000000 is the MT333x default and reads back as an unmapped bus "
+                        "on this part)")
     p.add_argument("--length", type=_parse_int, default=None, metavar="N",
                    help="byte count to read (default: from the header at 0xF4)")
     p.add_argument("--baud", type=_parse_int, default=DEFAULT_BAUD,

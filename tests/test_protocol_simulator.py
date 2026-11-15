@@ -21,7 +21,11 @@ def _image(size: int = 0x1000) -> bytes:
 
 def _brom(device: simulator.FakeDevice) -> brom.MtkBootRom:
     return brom.MtkBootRom(
-        "FAKE", serial_factory=device.factory, timeout=0.2, sync_timeout=0.5
+        "FAKE",
+        serial_factory=device.factory,
+        timeout=0.2,
+        sync_timeout=0.5,
+        nmea_probe_seconds=0.0,
     )
 
 

@@ -241,11 +241,12 @@ class LogDownloader:
         total = status.used_bytes if length is None else length
         if total <= 0:
             return b""
-        if total < 0:
-            raise LogDownloadError(f"invalid log length {total}")
 
-        self._disable_logging()
+        # The disable must happen *inside* the try: if the command times out the
+        # device may already have stopped recording, and the finally block is
+        # the only thing that turns it back on.
         try:
+            self._disable_logging()
             collected = bytearray()
             while len(collected) < total:
                 want = min(self.chunk, total - len(collected))
@@ -258,10 +259,14 @@ class LogDownloader:
                 collected += block
                 if progress_cb is not None:
                     progress_cb(min(len(collected), total), total)
-                if len(block) < want:
-                    # The device may clamp the final chunk; stop rather than
-                    # spin on the same address.
-                    break
+                # A short chunk is normal for the final read, but a device that
+                # clamps every reply would otherwise return a truncated log and
+                # report success. The loop continues from the advanced address,
+                # so a short chunk cannot spin.
+            if len(collected) < total:
+                raise LogDownloadError(
+                    f"the device returned {len(collected)} of {total} bytes"
+                )
             return bytes(collected[:total])
         finally:
             self._enable_logging()

@@ -270,7 +270,7 @@ Run before every commit:
 
 ```bash
 pytest -q
-ruff check src tests tools scripts
+ruff check src tests tools
 python tools/check_docs.py
 ```
 
@@ -323,9 +323,9 @@ repository** → push the clean history.
 * `docs/README.md` is the index; add a row for every new page.
 * Relative links only, and `python tools/check_docs.py` must report
   "all links resolve".
-* `docs/01-protocol.md` is the authoritative protocol reference. If you change
+* `docs/reference/01-protocol.md` is the authoritative protocol reference. If you change
   a protocol detail in code, change that page in the same commit.
-* `docs/09-verification.md` records what was verified and what was not. Keep it
+* `docs/dev/02-verification.md` records what was verified and what was not. Keep it
   honest — mark unverified things as unverified.
 * The wiki is a separate git repository
   (`<repo>.wiki.git`) with its own history. It is **not** part of the main

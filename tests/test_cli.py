@@ -1370,6 +1370,36 @@ class TestOutputDiscipline:
 
 
 # ---------------------------------------------------------------------------
+# Hardware-verified defaults
+# ---------------------------------------------------------------------------
+class TestHardwareDefaults:
+    def test_dump_defaults_to_the_measured_firmware_base(self) -> None:
+        """`m241 dump` must default to the address the hardware actually uses.
+
+        Measured on a V1.13 unit: reading ``0x20000000`` returns ``42 20 02 02``
+        (unmapped bus) and the firmware vector table is at ``0x00200000``.  The
+        simulator maps *both* addresses so the rest of the suite cannot catch a
+        regression here -- only an explicit assertion can.
+        """
+        from m241.protocol.brom import BASE_ADDR_FIRMWARE
+
+        parser = cli.build_parser()
+        args = parser.parse_args(["dump", "auto", "-o", "out.bin"])
+        assert args.base_addr == BASE_ADDR_FIRMWARE == 0x00200000
+
+    def test_flash_does_not_use_the_mt333x_base(self) -> None:
+        """The flash path must not fall back to the MT333x default either."""
+        from m241.protocol.brom import BASE_ADDR_FIRMWARE, BASE_ADDR_FIRMWARE_MT333X
+
+        assert BASE_ADDR_FIRMWARE != BASE_ADDR_FIRMWARE_MT333X
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            ["flash", "auto", "--da", "d.bin", "--fw", "f.bin", "--backup", "b.bin"]
+        )
+        assert getattr(args, "base_addr", BASE_ADDR_FIRMWARE) == BASE_ADDR_FIRMWARE
+
+
+# ---------------------------------------------------------------------------
 # Packaging data used by the CLI
 # ---------------------------------------------------------------------------
 class TestPackageData:

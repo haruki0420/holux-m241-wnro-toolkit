@@ -32,7 +32,7 @@ Only tick what applies.
 
 ```bash
 pytest -q
-ruff check src tests tools scripts
+ruff check src tests tools
 m241 selftest
 ```
 
@@ -44,8 +44,8 @@ Output:
 
 ## Docs
 
-- [ ] `docs/ARCHITECTURE.md` updated (public API changed)
-- [ ] `docs/07-cli-spec.md` + `tests/test_cli.py` updated (CLI changed)
+- [ ] `docs/dev/01-architecture.md` updated (public API changed)
+- [ ] `docs/reference/04-cli.md` + `tests/test_cli.py` updated (CLI changed)
 - [ ] `CHANGELOG.md` updated under "Unreleased"
 - [ ] `README.md`（日本語） / `README.en.md`（English） updated if the user-facing workflow changed
 

@@ -21,6 +21,7 @@ def _brom(device: FakeDevice, **kwargs: object) -> brom.MtkBootRom:
         serial_factory=device.factory,
         timeout=0.2,
         sync_timeout=0.5,
+        nmea_probe_seconds=0.0,
         **kwargs,
     )
 
@@ -140,7 +141,7 @@ def test_constructing_a_bootrom_does_not_open_the_port() -> None:
         calls.append((port, baud))
         raise AssertionError("the factory must not be called on construction")
 
-    boot = brom.MtkBootRom("COM7", serial_factory=factory)
+    boot = brom.MtkBootRom("COM7", serial_factory=factory, nmea_probe_seconds=0.0)
     assert calls == []
     assert boot.ser is None
     boot.close()
@@ -154,7 +155,9 @@ def test_serial_factory_receives_port_and_baud() -> None:
         calls.append((port, baud))
         return device.factory(port, baud)
 
-    boot = brom.MtkBootRom("COM7", baud=921600, serial_factory=factory, timeout=0.2)
+    boot = brom.MtkBootRom(
+        "COM7", baud=921600, serial_factory=factory, timeout=0.2, nmea_probe_seconds=0.0
+    )
     # The port is opened lazily: constructing the object touches no hardware.
     assert calls == []
     try:
@@ -173,7 +176,7 @@ def test_default_serial_factory_is_open_serial(monkeypatch: pytest.MonkeyPatch) 
         return device.factory(port, baud)
 
     monkeypatch.setattr(brom.ports, "open_serial", fake_open_serial)
-    boot = brom.MtkBootRom("COM7", baud=38400, timeout=0.1)
+    boot = brom.MtkBootRom("COM7", baud=38400, timeout=0.1, nmea_probe_seconds=0.0)
     try:
         boot.start()
     finally:
@@ -416,6 +419,102 @@ def test_dump_firmware_zero_length_returns_empty() -> None:
 
 def test_dump_firmware_roundtrips_an_image() -> None:
     image = _image(0x1000)
+    device = FakeDevice(image)
+    with _brom(device) as boot:
+        boot.start()
+        assert brom.dump_firmware(boot, length=len(image), byte_swap=True) == image
+
+
+# -- the NMEA-first safety check --------------------------------------------
+
+
+class _StreamingPort:
+    """A port that keeps emitting NMEA sentences, like a running firmware."""
+
+    def __init__(self) -> None:
+        self.baudrate = 38400
+        self.timeout = 1.0
+        self.dtr = False
+        self.rts = False
+        self.written = bytearray()
+
+    def read(self, size: int = 1) -> bytes:
+        return b"$GPRMC,120000.000,A,3550.00,N,13946.00,E,0.0,0.0,151126,,,A*70\r\n"
+
+    def write(self, data: bytes) -> int:
+        self.written += data
+        return len(data)
+
+    def reset_input_buffer(self) -> None:
+        return None
+
+    def flush(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+class _SilentPort(_StreamingPort):
+    """A port with nothing on it, like a logger already in BootROM."""
+
+    def read(self, size: int = 1) -> bytes:
+        return b""
+
+
+class _GarbagePort(_StreamingPort):
+    """A port emitting bytes that are neither NMEA nor a clean silence."""
+
+    def read(self, size: int = 1) -> bytes:
+        return b"\x00\xff\x13\x37"
+
+
+def _boot_for(port: object) -> brom.MtkBootRom:
+    return brom.MtkBootRom(  # type: ignore[arg-type]
+        "FAKE",
+        serial_factory=lambda _port, _baud: port,
+        timeout=0.05,
+        sync_timeout=0.05,
+        nmea_probe_seconds=0.05,
+    )
+
+
+def test_probe_nmea_detects_a_streaming_firmware() -> None:
+    boot = _boot_for(_StreamingPort())
+    with boot:
+        assert boot.probe_nmea(boot._ensure_open(), seconds=0.05) is True
+
+
+def test_probe_nmea_reports_silence() -> None:
+    boot = _boot_for(_SilentPort())
+    with boot:
+        assert boot.probe_nmea(boot._ensure_open(), seconds=0.05) is False
+
+
+def test_probe_nmea_refuses_when_it_cannot_tell() -> None:
+    boot = _boot_for(_GarbagePort())
+    with boot:
+        assert boot.probe_nmea(boot._ensure_open(), seconds=0.05) is None
+
+
+def test_start_refuses_to_pulse_a_streaming_firmware() -> None:
+    """Pulsing DTR/RTS at a running firmware leaves the unit unresponsive."""
+    port = _StreamingPort()
+    boot = _boot_for(port)
+    with boot, pytest.raises(BootRomError, match="streaming NMEA"):
+        boot.start()
+    assert port.dtr is False and port.rts is False, "the reset lines were pulsed"
+
+
+def test_start_refuses_when_the_state_is_unknown() -> None:
+    boot = _boot_for(_GarbagePort())
+    with boot, pytest.raises(BootRomError, match="cannot tell"):
+        boot.start()
+
+
+def test_start_proceeds_on_a_silent_device() -> None:
+    """The normal dump path: the firmware is silent, so the reset route is safe."""
+    image = _image(0x400)
     device = FakeDevice(image)
     with _brom(device) as boot:
         boot.start()

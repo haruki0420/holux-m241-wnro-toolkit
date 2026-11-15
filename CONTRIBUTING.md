@@ -15,7 +15,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 
 pytest -q
-ruff check src tests tools scripts
+ruff check src tests tools
 ```
 
 The whole suite runs with **no hardware**: `m241.protocol.simulator` is a

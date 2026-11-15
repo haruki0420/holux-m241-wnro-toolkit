@@ -259,6 +259,17 @@ def read_log_dump(
                 continue
 
             size = _record_size(raw, pos, bitmask, device=key)
+            if size <= 0:
+                # A malformed info block can leave the running bitmask at zero
+                # (kind 0x02 carrying 0, or 0x80000000 which clears it). Without
+                # this guard `pos` never advances and the loop runs forever on a
+                # dump the reader is supposed to tolerate.
+                if strict:
+                    raise LogParseError(
+                        f"record size is {size} at 0x{pos:X} (bitmask 0x{bitmask:08X})",
+                        offset=pos,
+                    )
+                break
             crc_bytes = 2 if key == "mtk" else 1
             if len(rest) < size:
                 if strict:
