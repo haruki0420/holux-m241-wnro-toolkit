@@ -15,6 +15,7 @@ Usage: python tools/load_da.py COM3 --da path/to/DA_v3.8.4.bin
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import sys
 import time
@@ -30,10 +31,9 @@ BASE_ADDR_DA = 0x00100800
 DA_INFO_FORMAT = ">BHBLHHHHL"
 DA_INFO_SIZE = struct.calcsize(DA_INFO_FORMAT)
 
-DEFAULT_DA = Path(
-    r"vendor-drop\Holuxlogger_Utility_1.1.0.47"
-    r"\Utility_1.1.0.47\DA_v3.8.4.bin"
-)
+#: Download agent shipped with the official Holux utility. Point M241_DA at
+#: your own copy; there is no default because the file is proprietary.
+DEFAULT_DA = Path(os.environ.get("M241_DA", "DA_v3.8.4.bin"))
 
 
 class BootRom:

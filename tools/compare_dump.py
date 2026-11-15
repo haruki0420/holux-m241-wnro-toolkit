@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 from pathlib import Path
 
-DROP = Path(r"vendor-drop")
+#: Root of the extracted official Holux packages. Override with --drop or the
+#: M241_DROP environment variable; the default is a sibling of this repo.
+DROP = Path(os.environ.get("M241_DROP", Path(__file__).resolve().parents[2] / "_extracted"))
 OFFICIAL = {
     "v1.12": DROP
     / "M-241_Firmware_V1.12_update_package"

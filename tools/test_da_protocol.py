@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import struct
 import sys
 import time
@@ -43,10 +44,8 @@ FIRMWARE_BASE = 0x00200000
 NMEA_BAUD = 38400
 BOOTROM_BAUD = 115200
 
-DEFAULT_DA = Path(
-    r"vendor-drop\Holuxlogger_Utility_1.1.0.47"
-    r"\Utility_1.1.0.47\DA_v3.8.4.bin"
-)
+#: Point M241_DA at the download agent from your own official package.
+DEFAULT_DA = Path(os.environ.get("M241_DA", "DA_v3.8.4.bin"))
 
 
 class Link:
