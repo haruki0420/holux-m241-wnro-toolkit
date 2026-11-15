@@ -97,6 +97,12 @@ class LogDownloader:
             flush()
 
     def _read_lines(self, deadline: float) -> list[str]:
+        """Read complete lines until *deadline*.
+
+        Prefer :meth:`_command`, which stops as soon as it sees the reply it
+        wants.  This helper always waits out the full deadline, so it is only
+        used where every line is of interest.
+        """
         lines: list[str] = []
         buffer = b""
         while time.monotonic() < deadline:
@@ -112,6 +118,23 @@ class LogDownloader:
                     lines.append(text)
         return lines
 
+    def _read_line(self, deadline: float) -> str | None:
+        """Read one complete line, or return ``None`` at the deadline."""
+        buffer = b""
+        while time.monotonic() < deadline:
+            chunk = self.ser.read(1)
+            if not chunk:
+                time.sleep(0.002)
+                continue
+            buffer += bytes(chunk)
+            if b"\n" in buffer:
+                raw, _sep, _rest = buffer.partition(b"\n")
+                text = raw.decode("ascii", "replace").strip()
+                if text:
+                    return text
+                buffer = b""
+        return None
+
     def _command(
         self,
         sentence: str,
@@ -119,11 +142,19 @@ class LogDownloader:
         expect: str,
         timeout: float | None = None,
     ) -> str | None:
-        """Send one PMTK sentence and return the first reply with *expect*."""
+        """Send one PMTK sentence and return the first reply with *expect*.
+
+        Returns as soon as the expected line arrives.  Waiting out the whole
+        timeout on every command made a download take minutes instead of
+        seconds, so the loop reads line by line and exits on a match.
+        """
         self.ser.reset_input_buffer()
         self._write(sentence)
         deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
-        for line in self._read_lines(deadline):
+        while time.monotonic() < deadline:
+            line = self._read_line(deadline)
+            if line is None:
+                return None
             if line.startswith(expect):
                 return line
         return None

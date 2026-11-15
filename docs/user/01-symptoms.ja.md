@@ -1,7 +1,7 @@
 # なぜ M-241 の日付が 19.6 年ずれるのか
 
 このページは、パッチを当てる前に「何が壊れているのか」を理解したい人向けの
-解説です。English version: [`../00-background.md`](../00-background.md)
+解説です。English version: [`../00-background.md`](01-symptoms.md)
 
 ## 1. GPS の時刻は「週番号 + 週内秒」
 
@@ -100,7 +100,7 @@ $GPRMC,022127.542,V,8960.0000,N,00000.0000,E,0.00,0.00,170906,,,N*7F
 
 使っているオフセット・ハッシュ・サイズはすべて、純正の Holux アップデート
 パッケージから実測したものです。記録は
-[`../04-firmware-profiles.md`](../04-firmware-profiles.md) にあります。
+[`../04-firmware-profiles.md`](../reference/03-firmware-offsets.md) にあります。
 ツールはオフセットを推測しません。既知のプロファイルに一致しないイメージは、
 明示的に強制しない限りパッチを拒否します。
 
@@ -113,5 +113,5 @@ V1.13 の純正リリースノートに
 とあります。増えた 4 バイトは speed（float）です。カタログの「130,000 ポイント」
 は 16 バイト記録のときの数字で、V1.13 では実際には約 104,000 ポイントしか
 入りません。詳細な計算は
-[`../02-log-format.md`](../02-log-format.md) と
-[`../04-firmware-profiles.md`](../04-firmware-profiles.md) を参照してください。
+[`../02-log-format.md`](../reference/02-log-format.md) と
+[`../04-firmware-profiles.md`](../reference/03-firmware-offsets.md) を参照してください。

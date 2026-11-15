@@ -20,9 +20,9 @@ M-241** GPS logger:
 - ships a **hardware-free simulator** so every code path is testable on CI.
 
 > 日本語の README は [`README.md`](README.md) です（こちらが既定）。
-> Background and the physics of the bug: [`docs/00-background.md`](docs/00-background.md).
-> Which advertised features still work in 2026: [`docs/11-feature-matrix.md`](docs/11-feature-matrix.md).
-> Geotagging photos from a track log: [`docs/12-photo-geotagging.md`](docs/12-photo-geotagging.md).
+> Background and the physics of the bug: [`docs/00-background.md`](docs/user/01-symptoms.md).
+> Which advertised features still work in 2026: [`docs/11-feature-matrix.md`](docs/reference/05-features.md).
+> Geotagging photos from a track log: [`docs/12-photo-geotagging.md`](docs/user/05-photos.md).
 > Changing the code? Read [`AGENTS.md`](AGENTS.md) first.
 
 ---
@@ -171,7 +171,7 @@ combinations) were all tried; the chip never returned a single byte.
 The next step is to **capture the vendor utility's firmware-update handshake
 over USB** and identify whatever precedes BootROM entry — the approach the
 original author used. All attempts are recorded in
-[`docs/10-hardware-session-notes.md`](docs/10-hardware-session-notes.md).
+[`docs/10-hardware-session-notes.md`](docs/dev/03-hardware-notes.md).
 
 ### If you would rather not flash
 
@@ -406,7 +406,7 @@ Verified output hashes:
 | V1.12 `4103601a…` | `dad2983d95cc3be251b358b2b7d5da9272d9946e70aaa0067162a4c21475c384` |
 | V1.13 `32fe5269…` | `901555843895054f77716364a446e8ad41c00b799c781b4ff95144352c141c9a` |
 
-Full derivation: [`docs/04-firmware-profiles.md`](docs/04-firmware-profiles.md).
+Full derivation: [`docs/04-firmware-profiles.md`](docs/reference/03-firmware-offsets.md).
 
 ## If you don't want to flash
 
@@ -453,7 +453,7 @@ tools/          analysis and verification helpers (no hardware required)
 Contributions are welcome, especially:
 
 - firmware profiles for V1.11 or other M-241 revisions (see
-  [`docs/04-firmware-profiles.md`](docs/04-firmware-profiles.md) for what a
+  [`docs/04-firmware-profiles.md`](docs/reference/03-firmware-offsets.md) for what a
   profile needs),
 - validation on 4 MiB units and on GR-245 variants,
 - Windows/macOS user reports in the issue tracker.

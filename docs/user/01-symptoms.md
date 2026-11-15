@@ -106,6 +106,6 @@ you want to read the date off the screen while walking around.
 
 Every offset, hash and size used by the tool is measured from the official
 Holux update packages and recorded in
-[`04-firmware-profiles.md`](04-firmware-profiles.md). The tool never guesses an
+[`04-firmware-profiles.md`](../reference/03-firmware-offsets.md). The tool never guesses an
 offset: if your image does not match a known profile, `m241 patch` refuses to
 run unless you force it.

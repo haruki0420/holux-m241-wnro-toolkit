@@ -1,7 +1,7 @@
 # CLI specification (`m241`)
 
 This is the authoritative behaviour spec for `src/m241/cli.py`. It extends
-[`ARCHITECTURE.md`](ARCHITECTURE.md) with the details that matter for user-facing
+[`ARCHITECTURE.md`](../dev/01-architecture.md) with the details that matter for user-facing
 behaviour. Tests in `tests/test_cli.py` enforce it.
 
 `main(argv: list[str] | None = None) -> int` — argv defaults to `sys.argv[1:]`.

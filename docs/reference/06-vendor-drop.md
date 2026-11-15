@@ -6,7 +6,7 @@ what the drop contains, what each file is good for, and how `m241 doctor
 --from-drop` consumes it.
 
 Manifest JSON shipped with the package:
-[`src/m241/data/vendor_drop.json`](../src/m241/data/vendor_drop.json).
+[`src/m241/data/vendor_drop.json`](../../src/m241/data/vendor_drop.json).
 
 ## Inventory
 
@@ -92,7 +92,7 @@ source for the 16→20-byte log record change:
 
 That is the whole reason a V1.13 unit stores ~104k points where a V1.12 unit
 stores ~130k, even though both manuals say 130,000. See
-[`04-firmware-profiles.md`](04-firmware-profiles.md).
+[`04-firmware-profiles.md`](03-firmware-offsets.md).
 
 ### `ReleaseNote.txt` (V1.13) — other useful lines
 

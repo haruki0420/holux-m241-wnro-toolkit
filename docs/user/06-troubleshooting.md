@@ -263,7 +263,7 @@ record length always comes from the block header's bitmask.
 
 ### Fewer points than the manual claims
 
-Expected. See `docs/02-log-format.md`: 130,048 points only happens with 16-byte
+Expected. See `docs/reference/02-log-format.md`: 130,048 points only happens with 16-byte
 records; a V1.13 unit (20-byte records) holds 104,038 on 2 MiB.
 
 ### Dates are all in 2006

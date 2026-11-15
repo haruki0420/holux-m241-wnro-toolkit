@@ -8,6 +8,44 @@ Everything below was measured on real hardware unless it says otherwise.
 
 ---
 
+## 0. How to work in this repository
+
+These rules exist because they were broken repeatedly. They are not style
+preferences.
+
+### 0.1 Report every three minutes
+
+Any task that will take more than a couple of minutes **must** be reported on at
+least every three minutes: what is running, what has finished, what is next. Do
+not disappear into a long tool call and reappear with a result.
+
+### 0.2 Run long checks in the background
+
+`pytest`, builds and hardware sweeps go through a background job so the turn
+returns immediately and progress can be reported. Never block a turn on a
+multi-minute command.
+
+### 0.3 One check command
+
+Use `python tools/check_all.py` instead of running `pytest`, `ruff` and
+`check_docs.py` separately. It runs all three and prints a one-line summary per
+gate.
+
+### 0.4 Never manage files with a script
+
+* Moving or renaming a file: **`git mv` only**. A script that writes files
+  leaves no rename history.
+* Editing content: the editor tools, one change at a time. **No bulk
+  find-and-replace scripts** — a previous bulk replacement corrupted Python
+  identifiers (`True` became `hrue`) and had to be reverted from git.
+
+### 0.5 Do not claim what has not been verified
+
+If something has not been run on hardware, say so in the docs with `⚠️ 未検証`.
+Writing `✅` for an untested platform or feature is a defect, not optimism.
+
+---
+
 ## 1. What this project is
 
 A cross-platform (Windows / Linux / macOS) toolkit for the **Holux M-241** GPS

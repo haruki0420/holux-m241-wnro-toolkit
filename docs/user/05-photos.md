@@ -13,7 +13,7 @@ the toolkit reads the track log and the photo EXIF itself, and emits an
 | Need | Why |
 |---|---|
 | `m241` installed (`pip install .`) | the whole workflow |
-| The logger's firmware patched | otherwise every timestamp is 19.6 years off — see [`00-background.md`](00-background.md) |
+| The logger's firmware patched | otherwise every timestamp is 19.6 years off — see [`00-background.md`](01-symptoms.md) |
 | [exiftool](https://exiftool.org/) | applies the coordinates to the photos (optional: you can use the CSV/JSON output instead) |
 | Camera clock accurate | a wrong camera clock shifts every photo |
 

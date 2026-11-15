@@ -186,12 +186,12 @@ def test_no_windows_drive_letter_paths() -> None:
 )
 def test_documented_platforms(label: str, needle: str) -> None:
     """Every platform the project claims to support is documented."""
-    doc = (REPO_ROOT / "docs" / "03-platforms.md").read_text(encoding="utf-8")
+    doc = (REPO_ROOT / "docs" / "user" / "02-install.md").read_text(encoding="utf-8")
     assert needle.lower() in doc.lower(), f"{label} is not documented"
 
 
 def test_readme_claims_match_reality() -> None:
-    """The README's platform table and the docs must agree on what we support."""
+    """The README and the capacity reference must agree with the code."""
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     for needle in ("Windows", "Linux", "macOS", "3.10"):
         assert needle in readme, f"README does not mention {needle}"
@@ -200,8 +200,11 @@ def test_readme_claims_match_reality() -> None:
 
     assert capacity("2M", 16).points == 130_048
     assert capacity("2M", 20).points == 104_038
+    features = (REPO_ROOT / "docs" / "reference" / "02-log-format.md").read_text(
+        encoding="utf-8"
+    )
     for text in ("130,048", "104,038"):
-        assert text in readme, f"README does not advertise {text}"
+        assert text in features, f"the log-format reference does not advertise {text}"
 
 
 def test_gitignore_does_not_hide_the_source_tree() -> None:

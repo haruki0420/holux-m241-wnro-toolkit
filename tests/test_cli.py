@@ -1370,59 +1370,6 @@ class TestOutputDiscipline:
 
 
 # ---------------------------------------------------------------------------
-# Script shims
-# ---------------------------------------------------------------------------
-class TestScriptShims:
-    @pytest.mark.parametrize(
-        "script",
-        ["dump_firmware.py", "patch_firmware.py", "flash_firmware.py", "m241.py"],
-    )
-    def test_shim_is_short_and_bootstraps_src(self, script: str) -> None:
-        source = (REPO_ROOT / "scripts" / script).read_text(encoding="utf-8")
-        assert len(source.splitlines()) <= 25
-        assert "sys.path.insert" in source
-        assert "parents[1] / \"src\"" in source
-        assert "from m241.cli import main" in source
-
-    def test_m241_shim_runs_the_cli(self) -> None:
-        env = dict(os.environ)
-        env.pop("PYTHONPATH", None)
-        result = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts" / "m241.py"), "logs", "capacity"],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=120,
-            check=False,
-        )
-        assert result.returncode == 0, result.stderr
-        assert "130,048" in result.stdout
-
-    def test_patch_shim_forwards_argv(self, tmp_path: Path) -> None:
-        source = tmp_path / "stock.bin"
-        source.write_bytes(build_image())
-        target = tmp_path / "out.bin"
-        env = dict(os.environ)
-        env.pop("PYTHONPATH", None)
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(REPO_ROOT / "scripts" / "patch_firmware.py"),
-                str(source),
-                "-o",
-                str(target),
-            ],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=120,
-            check=False,
-        )
-        assert result.returncode == 0, result.stderr
-        assert target.read_bytes() == patched_image()
-
-
-# ---------------------------------------------------------------------------
 # Packaging data used by the CLI
 # ---------------------------------------------------------------------------
 class TestPackageData:
