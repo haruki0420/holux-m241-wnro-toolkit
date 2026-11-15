@@ -48,10 +48,10 @@ plus an entry in `src/m241/data/firmware_profiles.json`. To add one:
 m241 dump auto -o backup/mine.bin
 
 # 2. show what the analyzer sees (no proprietary bytes in the output)
-python tools/re/analyze_firmware.py backup/mine.bin
+python tools/analysis/analyze_firmware.py backup/mine.bin
 
 # 3. show what the patch would change (writes nothing)
-python tools/re/analyze_firmware.py --plan backup/mine.bin
+python tools/analysis/analyze_firmware.py --plan backup/mine.bin
 ```
 
 Open an issue with that output — it contains hashes and offsets only, never

@@ -1,17 +1,16 @@
-"""Test the hybrid (article + upstream + disassembly) DA write path safely.
+"""Probe the DA write commands on hardware without rewriting the firmware.
 
-This proves the corrected protocol *without erasing flash*:
+Steps:
 
   1. enter BootROM ($PMTK180 + sync),
   2. load and start the DA,
-  3. send the 0xD3 range command exactly as the disassembly shows
-     (header / begin / end as separate writes) and report whether the ACK
-     arrives,
+  3. send the 0xD3 range command in the form the reference implementation
+     uses (one ten-byte frame) and report the ACK plus its status byte,
   4. optionally send 0xD5 and read the two ACKs.
 
 Step 3 does set the memory range, which makes the DA erase the sectors that
 range covers.  To stay non-destructive the range is placed in **unused** flash
-space, well past the firmware image, and `--dry-run` stops before 0xD3 if you
+space, well past the firmware image, and `--probe-only` stops before 0xD3 if you
 just want the DA handshake.
 
 Usage:
@@ -193,24 +192,17 @@ def start_da(link: Link, da_path: Path) -> bool:
 
 
 def probe_mem_cmd(link: Link, start: int, length: int) -> bool:
-    """Send 0xD3 the way the vendor tool does and report the ACK."""
+    """Send 0xD3 as one ten-byte frame and report the ACK plus its status byte."""
     end = start + length - 1
     print(f"  sending 0xD3: range 0x{start:08X}..0x{end:08X}")
-    # header: opcode + block count, as a separate write
-    link.ser.write(struct.pack(">BB", OPCODE_MEM_CMD, 1))
-    link.ser.flush()
-    time.sleep(0.02)
-    link.ser.write(struct.pack(">L", start))
-    link.ser.flush()
-    time.sleep(0.02)
-    link.ser.write(struct.pack(">L", end))
+    link.ser.write(struct.pack(">BBLL", OPCODE_MEM_CMD, 1, start, end))
     link.ser.flush()
 
     started = time.time()
-    reply = link.read_byte(timeout=30.0)
+    reply = link.read_byte(timeout=60.0)
     elapsed = time.time() - started
     if reply is None:
-        print(f"  [!] no reply after {elapsed:.1f}s (the upstream TIMEOUT symptom)")
+        print(f"  [!] no ACK after {elapsed:.1f}s")
         return False
     if reply == NAK:
         print(f"  [!] NAK after {elapsed:.1f}s")
@@ -218,8 +210,14 @@ def probe_mem_cmd(link: Link, start: int, length: int) -> bool:
     if reply != ACK:
         print(f"  [!] unexpected 0x{reply:02X} after {elapsed:.1f}s")
         return False
-    print(f"  ACK 0x5A after {elapsed:.1f}s -> the split 0xD3 is accepted")
-    return True
+    # The ACK is always followed by a status byte; leaving it unread shifts
+    # every later frame by one byte.
+    status = link.read_byte(timeout=5.0)
+    if status is None:
+        print("  [!] ACK but no status byte")
+        return False
+    print(f"  ACK 0x5A + status 0x{status:02X} after {elapsed:.1f}s")
+    return status == 0x00
 
 
 def probe_write_cmd(link: Link, packet_len: int = 0x100) -> bool:

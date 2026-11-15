@@ -449,7 +449,7 @@ tools/          解析・検証用スクリプト（実機不要）
 | まず使ってみたい | この README の「クイックスタート」「やりたいこと別ガイド」 |
 | なぜ壊れるのか知りたい | [`docs/ja/00-background.ja.md`](docs/ja/00-background.ja.md) |
 | 何がどれだけ検証済みか | [`docs/09-verification.md`](docs/09-verification.md) |
-| 自分でファームを解析したい | [`tools/re/analyze_firmware.py`](tools/re/analyze_firmware.py) |
+| 自分でファームを解析したい | [`tools/analysis/analyze_firmware.py`](tools/analysis/analyze_firmware.py) |
 | エラーが出た | [`docs/06-troubleshooting.md`](docs/06-troubleshooting.md) → [`docs/08-quick-card.md`](docs/08-quick-card.md) |
 | 危険性を知りたい | [`DISCLAIMER.md`](DISCLAIMER.md) |
 | プロトコルを実装したい | [`docs/01-protocol.md`](docs/01-protocol.md) |

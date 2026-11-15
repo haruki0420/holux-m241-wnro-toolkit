@@ -450,16 +450,20 @@ class MtkBootRom:
         skip_cksum: bool = False,
         progress_cb: ProgressCallback | None = None,
     ) -> None:
-        """Write ``data`` with the 16-bit BootROM write command (opcode 0xA1).
+        """Write ``data`` with the 16-bit BootROM write command (opcode ``0xA1``).
 
-        The frame carries the count in **16-bit words**.  The payload is then
-        streamed in ten byte chunks, each echoed by the chip.  With
+        The frame carries the count in **16-bit words**.  With
         ``byte_swap=True`` the payload is pair-swapped on the wire (the chip
         stores little-endian, so pass bytes as they should appear in memory).
 
-        The header and the payload are written in a single burst: feeding them
-        byte at a time with a flush desynchronises the echo stream on real
-        hardware.
+        **Echo handling.** The chip echoes every byte it receives, but the echo
+        trails by exactly one byte: after sending N bytes only N-1 echo bytes
+        are available, and the echo of the final byte never arrives because
+        nothing follows it.  Requiring an exact echo for the last byte (or
+        reading one byte at a time) therefore hangs on real hardware.  This
+        implementation streams the frame in ten-byte chunks and, after each
+        chunk, compares the accumulated echo against everything sent so far
+        *minus its last byte*.
 
         Unless ``skip_cksum`` is set the chip's checksum of the written region
         is compared with the checksum of the bytes that were stored; RAM writes
@@ -476,24 +480,43 @@ class MtkBootRom:
         header = self._frame(OPCODE_WRITE16, address, len(payload) // 2)
 
         serial_port = self._ensure_open()
+        self._discard_input(serial_port)
+
+        state = {"sent": b"", "echo": b""}
+
+        def pump(block: bytes, where: int) -> None:
+            """Send ``block`` and verify the echo, allowing for the one-byte lag."""
+            serial_port.write(block)
+            serial_port.flush()
+            state["sent"] += block
+            if not verify_echo:
+                return
+            want = len(state["sent"]) - 1
+            if want > len(state["echo"]):
+                state["echo"] += self.read_exact(
+                    want - len(state["echo"]),
+                    what=f"write16 echo at 0x{where:08X}",
+                )
+            if state["echo"] != state["sent"][:-1]:
+                raise BootRomError(
+                    f"BootROM echo mismatch while writing at 0x{where:08X}: "
+                    f"sent {state['sent'].hex()}, chip echoed {state['echo'].hex()}",
+                    offset=len(state["sent"]),
+                )
+
+        pump(header, address)
         done = 0
         for offset in range(0, len(wire), WRITE_CHUNK):
             chunk = wire[offset : offset + WRITE_CHUNK]
-            block = header + chunk if offset == 0 else chunk
-            serial_port.write(block)
-            serial_port.flush()
-            echoed = self.read_exact(
-                len(block), what=f"write16 echo at 0x{address + offset:08X}"
-            )
-            if verify_echo and echoed != block:
-                raise BootRomError(
-                    f"BootROM echo mismatch while writing at 0x{address + offset:08X}: "
-                    f"sent {block.hex()}, chip echoed {echoed.hex()}",
-                    offset=offset + (len(header) if offset == 0 else 0),
-                )
+            pump(chunk, address + offset)
             done += len(chunk)
             if progress_cb is not None:
                 progress_cb(done, len(wire))
+
+        # The chip may still be flushing; drop the tail so the next command
+        # starts on a clean frame boundary.
+        self._drain_quiet(serial_port)
+
         if not skip_cksum:
             stored = swap_pairs(wire)
             expected = checksum_xor16(stored)
@@ -503,6 +526,23 @@ class MtkBootRom:
                     f"BootROM write16 checksum mismatch at 0x{address:08X}: "
                     f"expected 0x{expected:04X}, chip reports 0x{actual:04X}"
                 )
+
+    def _drain_quiet(self, serial_port: Any, *, quiet: float = 0.06, limit: float = 1.0) -> bytes:
+        """Consume bytes until the line has been idle for ``quiet`` seconds."""
+        drained = bytearray()
+        deadline = time.monotonic() + limit
+        quiet_at = time.monotonic() + quiet
+        while time.monotonic() < deadline:
+            chunk = serial_port.read(256)
+            if chunk:
+                drained += chunk
+                quiet_at = time.monotonic() + quiet
+            elif time.monotonic() >= quiet_at:
+                break
+            else:
+                time.sleep(_POLL)
+        self._discard_input(serial_port)
+        return bytes(drained)
 
 
 def _decode_firmware_size(raw_header: bytes) -> int:

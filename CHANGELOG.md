@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+Everything below was found while flashing a real M-241 end to end. The previous
+release could dump and patch, but its **write path did not work on hardware**.
+
+- **`0xD3` replies with two bytes, not one.** The DA sends ACK *and* a status
+  byte. Reading only the ACK left the status byte in the buffer, shifting every
+  later frame by one byte, so the `0xD5` step always timed out. The client now
+  reads both and reports a non-zero status as an error.
+- **WRITE16 echo trails by one byte.** After sending N bytes only N-1 echo bytes
+  exist, and the final byte's echo never arrives. Requiring an exact echo (or
+  writing one byte and waiting for its echo) hangs on hardware. `write16` now
+  accumulates the echo and compares it against everything sent minus its last
+  byte, then drains the tail.
+- **`0xD3` is sent as one ten-byte frame.** Splitting it into header / begin /
+  end writes was an unverified guess; the single frame is what works.
+- **Reads carry no checksum trailer.** `0xA2`/`0xAF` return echo + data only;
+  the checksum is a separate `0xA4` command. Consuming a trailer desynchronised
+  every read.
+- **Firmware base is `0x00200000`.** `0x20000000` returns `42 20 02 02`
+  (unmapped bus) on this part.
+- **`0xAF` returns byte-reversed 32-bit words**, which is not the same
+  transformation as the 16-bit pair swap used by `0xA2`/`0xA1`.
+- **`$PMTK180*3B` needs a live NMEA stream.** The client now checks for one and
+  reports a precise error instead of a bare sync timeout, and it refuses to
+  pulse the reset lines when it cannot tell whether the firmware is running
+  (doing so leaves a running logger silent).
+
+### Added
+
+- **Hardware-shaped regression tests**: a full 406,620-byte image write
+  (1,588 packets + a 92-byte tail), `0xD3` status-byte consumption, and a
+  non-zero status report.
+- `docs/01-protocol.md` rewritten with the measured values, including the
+  one-byte echo lag, the two-byte `0xD3` reply, the real 512 KiB flash size,
+  and a recovery procedure for an interrupted flash.
+
+### Changed
+
+- `tools/re/` renamed to `tools/analysis/`.
+- Removed the ad-hoc scripts used while bringing the write path up; the proven
+  logic lives in `m241.protocol` and is exercised by the test suite.
+
 ## [1.0.0] — 2026-11-15
 
 First public release. Cross-platform (Windows / Linux / macOS) re-implementation
@@ -59,7 +102,7 @@ of the Holux M-241 GPS week-number-rollover repair.
 - **Vendor-drop tooling**: `m241 doctor --from-drop` and
   `tools/verify_against_drop.py` identify and verify the proprietary files
   (hashes only; nothing is redistributed), and
-  `tools/re/analyze_firmware.py` reproduces every offset in this repo.
+  `tools/analysis/analyze_firmware.py` reproduces every offset in this repo.
 - **Documentation**: background, protocol, log format, platform notes, firmware
   profiles, vendor-drop inventory, troubleshooting, CLI spec, roadmap,
   Japanese background, and a `DISCLAIMER.md` that says plainly what can brick.

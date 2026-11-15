@@ -362,3 +362,50 @@ def test_restart_returns_to_bootrom(tmp_path: object) -> None:
         assert len(boot.read32(0x20000000, 16)) == 16
     finally:
         boot.close()
+
+# -- hardware-shaped regressions -------------------------------------------
+
+
+def test_write_firmware_handles_the_real_image_length(tmp_path: object) -> None:
+    """The shipping image is 406,620 bytes: 1,588 full packets + a 92-byte tail.
+
+    This is the exact shape that was written to a real unit, so it is pinned
+    here: a short final packet must be accepted by the DA.
+    """
+    device = FakeDevice(flash_size=0x80000)
+    boot, agent = _started_da(device, tmp_path)
+    try:
+        image = _image(406620)
+        agent.write_firmware(image)
+        assert bytes(device.memory[: len(image)]) == image
+    finally:
+        boot.close()
+
+
+def test_mem_cmd_status_byte_is_consumed(tmp_path: object) -> None:
+    """0xD3 is answered by ACK *and* a status byte.
+
+    Leaving the status byte in the buffer shifts every later frame by one byte,
+    which is what made the 0xD5 step time out on hardware.  A successful write
+    followed by a read proves the stream stayed aligned.
+    """
+    device = FakeDevice()
+    boot, agent = _started_da(device, tmp_path)
+    try:
+        image = _image(0x300)
+        agent.write_firmware(image)
+        agent.restart()
+        boot.start()
+        assert brom.dump_firmware(boot, length=len(image)) == image
+    finally:
+        boot.close()
+
+
+def test_mem_cmd_reports_a_bad_status_byte(tmp_path: object) -> None:
+    device = FakeDevice(mem_cmd_status=0x05)
+    boot, agent = _started_da(device, tmp_path)
+    try:
+        with pytest.raises(DownloadAgentError, match="status 0x05"):
+            agent.write_firmware(_image(0x200))
+    finally:
+        boot.close()

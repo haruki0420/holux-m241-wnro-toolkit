@@ -8,13 +8,13 @@ files you point it at.
 Usage
 -----
     # profile one image (or several): constants, version marker, header
-    python tools/re/analyze_firmware.py vendor/m241_v113.bin
+    python tools/analysis/analyze_firmware.py vendor/m241_v113.bin
 
     # compare two images and show every differing byte cluster
-    python tools/re/analyze_firmware.py --diff backup/v112.bin backup/v113.bin
+    python tools/analysis/analyze_firmware.py --diff backup/v112.bin backup/v113.bin
 
     # explain exactly what the WNRO patch would change, without writing anything
-    python tools/re/analyze_firmware.py --plan backup/stock.bin
+    python tools/analysis/analyze_firmware.py --plan backup/stock.bin
 
 Notes
 -----

@@ -19,7 +19,7 @@ No firmware bytes are needed, and none may be committed.
 ## Analyzer output
 
 ```bash
-$ python tools/re/analyze_firmware.py <your_image.bin>
+$ python tools/analysis/analyze_firmware.py <your_image.bin>
 ```
 
 ```
@@ -29,7 +29,7 @@ $ python tools/re/analyze_firmware.py <your_image.bin>
 ## Patch plan output
 
 ```bash
-$ python tools/re/analyze_firmware.py --plan <your_image.bin>
+$ python tools/analysis/analyze_firmware.py --plan <your_image.bin>
 ```
 
 ```

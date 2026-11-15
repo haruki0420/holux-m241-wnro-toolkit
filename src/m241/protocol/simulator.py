@@ -84,6 +84,7 @@ class FakeDevice:
         corrupt_echo: bool = False,
         fail_packet: int | None = None,
         nak_set_baud: bool = False,
+        mem_cmd_status: int = 0x00,
     ) -> None:
         self.flash_size = flash_size
         self.da_version = da_version
@@ -98,6 +99,8 @@ class FakeDevice:
         #: Zero-based packet index the fake DA NAKs.
         self.fail_packet = fail_packet
         self.nak_set_baud = nak_set_baud
+        #: Status byte the fake DA returns after the 0xD3 ACK.
+        self.mem_cmd_status = mem_cmd_status
 
         self._memory = bytearray(ADDRESS_SPACE)
         self._ram = bytearray(RAM_SIZE)
@@ -315,7 +318,9 @@ class FakeDevice:
             self._da_cursor = start
             self._da_total = end - start + 1
             self._da_packet_index = 0
-            self.emit(bytes([ACK]))
+            # Hardware sends ACK **and a status byte**; the host must read both
+            # or every later frame is shifted by one byte.
+            self.emit(bytes([ACK, self.mem_cmd_status]))
             return
         if opcode == OPCODE_WRITE:
             if len(self._frame) < 5:

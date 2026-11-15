@@ -48,11 +48,6 @@ SYNC = 0xC0
 WRITE_PACKET_LEN = 0x100
 EXPECTED_DA_VERSION = 0x0308
 
-#: Delay inserted between the 0xD3 fields.  The vendor tool sends the header,
-#: the begin address and the end address as separate writes with a short pause,
-#: then waits for a single ACK.
-BLOCK_FIELD_DELAY = 0.02
-
 #: How long to wait for the 0xD3 acknowledgement.  Setting the range erases the
 #: sectors the new data will occupy, so this must cover a full block erase.
 DEFAULT_ERASE_TIMEOUT = 30.0
@@ -289,31 +284,35 @@ class DownloadAgent:
         self._await_ack("the final write acknowledgement, second")
 
     def _begin_write(self, start: int, length: int) -> None:
-        """Send the 0xD3 range command as the vendor tool does.
+        """Send the ``0xD3`` range command and the ``0xD5`` write command.
 
-        Split into header / begin-address / end-address writes.  The byte
-        stream is identical to a single 10-byte write, but real hardware is
-        happier when the fields arrive separately, and the ACK that follows
-        means "the range is set and the affected sectors are erased".
+        Measured on hardware, and matching the published reference:
+
+        * ``0xD3`` goes out as **one ten-byte frame**
+          (``>BBLL`` = opcode, block count 1, begin, end) and the reply is
+          **two bytes**: ACK (0x5A) followed by a status byte.  Reading only
+          the ACK leaves the status byte in the buffer, which shifts every
+          later frame by one byte -- the failure that made the ``0xD5`` step
+          time out.
+        * ``0xD5`` is ``>BL`` (opcode, packet length) and is answered by two
+          ACKs.
         """
         end = start + length - 1
         serial_port = self._require_serial()
+
+        # Drop any late bytes from the download-agent upload so the range
+        # command starts on a clean boundary.
+        self._drain(serial_port)
+
         try:
-            # header: opcode + block count
-            self._send(struct.pack(">BB", OPCODE_MEM_CMD, 1))
-            serial_port.flush()
-            time.sleep(BLOCK_FIELD_DELAY)
-            # begin address, then end address (both big-endian)
-            self._send(struct.pack(">L", start))
-            serial_port.flush()
-            time.sleep(BLOCK_FIELD_DELAY)
-            self._send(struct.pack(">L", end))
+            self._send(struct.pack(">BBLL", OPCODE_MEM_CMD, 1, start, end))
             serial_port.flush()
         except Exception as exc:
             raise DownloadAgentError(
                 f"could not send the memory-range command (0xD3): {exc}"
             ) from exc
-        self._await_ack_slow("the memory-range command (0xD3)")
+
+        reply = self._read_ack_with_status("the memory-range command (0xD3)")
 
         try:
             self._send(struct.pack(">BL", OPCODE_WRITE, WRITE_PACKET_LEN))
@@ -327,17 +326,22 @@ class DownloadAgent:
                 f"download agent refused the write setup (0xD5): {exc}"
             ) from exc
 
-    def _await_ack_slow(self, what: str) -> None:
-        """Wait for a single ACK, allowing for flash erase time.
+        if reply not in (0x00, 0x5A):
+            raise DownloadAgentError(
+                f"the download agent reported status 0x{reply:02X} for the "
+                f"memory-range command (0xD3)"
+            )
 
-        Reading the range command's ACK too early is the failure the upstream
-        project documented (echo seen, ACK never).  ``erase_timeout`` is
-        intentionally large because setting the range erases the sectors the
-        new data will occupy.
+    def _read_ack_with_status(self, what: str) -> int:
+        """Read the two-byte ``0xD3`` reply and return the status byte.
+
+        The ACK itself can take a long time: setting the range erases the
+        sectors the new data will occupy, so the wait uses ``erase_timeout``.
         """
         serial_port = self._require_serial()
         previous = getattr(serial_port, "timeout", None)
         deadline = time.monotonic() + self.erase_timeout
+        ack: int | None = None
         try:
             with contextlib.suppress(AttributeError, OSError, ValueError):
                 serial_port.timeout = 0.25
@@ -351,15 +355,43 @@ class DownloadAgent:
                         f"the download agent rejected {what} (NAK 0xA5)"
                     )
                 if reply == ACK:
-                    return
+                    ack = reply
+                    break
                 # Anything else is stale traffic; keep waiting.
+            if ack is None:
+                raise DownloadAgentError(
+                    f"timeout after {self.erase_timeout:.0f}s waiting for the "
+                    f"ACK of {what}"
+                )
+            # The status byte always follows the ACK.
+            status = serial_port.read(1)
+            if not status:
+                raise DownloadAgentError(
+                    f"the download agent sent the ACK for {what} but no status byte"
+                )
+            return status[0]
         finally:
             if previous is not None:
                 with contextlib.suppress(AttributeError, OSError, ValueError):
                     serial_port.timeout = previous
-        raise DownloadAgentError(
-            f"timeout after {self.erase_timeout:.0f}s waiting for the ACK of {what}"
-        )
+
+    def _drain(self, serial_port: Any, *, quiet: float = 0.06, limit: float = 1.0) -> bytes:
+        """Consume bytes until the line has been idle for ``quiet`` seconds."""
+        drained = bytearray()
+        deadline = time.monotonic() + limit
+        quiet_at = time.monotonic() + quiet
+        while time.monotonic() < deadline:
+            chunk = serial_port.read(256)
+            if chunk:
+                drained += chunk
+                quiet_at = time.monotonic() + quiet
+            elif time.monotonic() >= quiet_at:
+                break
+            else:
+                time.sleep(0.002)
+        with contextlib.suppress(AttributeError, OSError):
+            serial_port.reset_input_buffer()
+        return bytes(drained)
 
     def restart(self) -> None:
         """Send the DA restart command (0xD9)."""

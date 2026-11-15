@@ -10,9 +10,9 @@ The official Holux update packages were hashed and analysed byte by byte. The
 tool that does it ships in the repo:
 
 ```bash
-python tools/re/analyze_firmware.py vendor/*_V1.12_*.bin vendor/*_V1.13_*.bin
-python tools/re/analyze_firmware.py --plan vendor/*_V1.13_*.bin
-python tools/re/analyze_firmware.py --diff vendor/*_V1.12_*.bin vendor/*_V1.13_*.bin
+python tools/analysis/analyze_firmware.py vendor/*_V1.12_*.bin vendor/*_V1.13_*.bin
+python tools/analysis/analyze_firmware.py --plan vendor/*_V1.13_*.bin
+python tools/analysis/analyze_firmware.py --diff vendor/*_V1.12_*.bin vendor/*_V1.13_*.bin
 ```
 
 What it reports for the two stock images (this is the origin of every offset in
