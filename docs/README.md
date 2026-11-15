@@ -1,7 +1,7 @@
 # Documentation
 
 Everything we learned while building this toolkit, written down so the next
-person does not have to reverse-engineer it again.
+person does not have to rediscover it.
 
 Read in this order if you are new:
 

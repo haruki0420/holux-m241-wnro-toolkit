@@ -141,8 +141,8 @@ weeks later, but this toolkit's profiles only carry the verified single shift.
 ### How well is "it works" verified?
 
 - The `0x402F4` offset and the patch content were **verified on real hardware**
-  by the original reverse-engineer
-  ([catea.tech write-up](https://catea.tech/blog/holux-m241-wnro-fix)).
+  by the upstream author of the
+  [catea.tech write-up](https://catea.tech/blog/holux-m241-wnro-fix).
 - This repository reproduces that result **deterministically against the stock
   firmware images**, and locks the output SHA256 in tests.
 - However, **no device was flashed while building this repository**.
@@ -393,7 +393,7 @@ offset 0x59C28 : "V1.13"  ->  "V1.14"           (cosmetic marker)
 
 The image contains the epoch constant **twice**; only `0x402F4` feeds the
 timestamp path. Patching both double-shifts the clock to 2045 (verified on
-hardware by the original reverse-engineer), so the tool patches exactly one and
+hardware by the upstream author), so the tool patches exactly one and
 `tests/test_firmware_patcher.py` locks that behaviour down.
 
 Verified output hashes:
