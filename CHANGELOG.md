@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`.gitignore` now ignores `/holux/`**, the folder the official Holux packages
+  are extracted into. Six of the seven package files were already covered by the
+  existing `*.zip` / `*.exe` / `*.dll` patterns, but the user manual PDF, the two
+  release notes and the CP210x driver's `.inf` / `.txt` files were not, so a
+  `git add .` would have committed them. The directory is ignored as a whole now,
+  which also keeps the extracted binaries out.
+
+### Documentation
+
+- **`README.md` rewritten for first-time readers.** The three-step workflow
+  (dump → patch → flash) is stated in the opening paragraph, the recovery command
+  moved next to the flash step instead of living in a separate section, the
+  power-cycle prompt in step 2 is described, and `m241 selftest` is documented as
+  the hardware-free check. The "what else can it do" table pointed at the photo
+  guide for commands unrelated to photos; it points at the CLI reference now.
+  Duplicated warnings and horizontal rules were dropped, the device is called
+  本体 throughout, and the emoji status markers were replaced with words.
+
 ## [1.0.1] — 2026-11-16
 
 ### Added

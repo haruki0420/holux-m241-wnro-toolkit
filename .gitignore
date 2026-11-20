@@ -22,6 +22,9 @@ PowerFlash*
 /inbox/
 /backup/
 /backups/
+# The official Holux drop (zips + the files extracted from them). Proprietary;
+# `m241 doctor --from-drop` and tools/verify_against_drop.py read it locally.
+/holux/
 
 # Local device captures (may contain your coordinates)
 captures/
